@@ -18,9 +18,9 @@ SENTIMENT_LABELS = ["Positive", "Negative"]
 # Intent categories - customize these based on your supervisor's needs
 INTENT_LABELS = [
     "Donation Inquiry",
-    "Withdrawn or Unhappy",
+    "Withdrawing support or ending relationship",
     "Website Issue",
-    "Complaint",
+    "Complaint about service",
     "Meeting Request",
     "Thank You",
     "Update Info"
@@ -38,21 +38,60 @@ def analyze_email(text):
     # Create a dictionary mapping each label to its score
     intent_scores = dict(zip(intent_result['labels'], intent_result['scores']))
 
-    # BOOLEAN APPROACH: Set threshold for "Yes" (e.g., > 30% confidence = Yes)
-    THRESHOLD = 0.30
+    # BOOLEAN APPROACH: Set threshold for "Yes"
+    INTENT_THRESHOLD = 0.20  # Lower threshold to catch more donation mentions
+    WITHDRAWN_THRESHOLD = 0.18  # Slightly lower for catching explicit withdrawal language
+    SENTIMENT_THRESHOLD = 0.25  # Threshold for detecting positive/negative independently (lowered to catch mixed)
 
-    # Sentiment Booleans
-    pos_sentiment = "Yes" if sent_result['label'] == "POSITIVE" and sent_result['score'] > 0.6 else "No"
-    neg_sentiment = "Yes" if sent_result['label'] == "NEGATIVE" and sent_result['score'] > 0.6 else "No"
+    # INDEPENDENT SENTIMENT DETECTION - allows for mixed emotions
+    # Use zero-shot classification to check for positive AND negative aspects separately
+    sentiment_result = intent_classifier(
+        text,
+        candidate_labels=["expressing gratitude or happiness", "expressing complaint or disappointment", "neutral inquiry"],
+        multi_label=True  # This allows multiple labels to be true at once
+    )
 
-    # If neither is confident, mark as Null
-    if sent_result['score'] <= 0.6:
+    sentiment_dict = dict(zip(sentiment_result['labels'], sentiment_result['scores']))
+
+    positive_score = sentiment_dict.get("expressing gratitude or happiness", 0)
+    negative_score = sentiment_dict.get("expressing complaint or disappointment", 0)
+    neutral_score = sentiment_dict.get("neutral inquiry", 0)
+
+    # Determine Pos_sentiment independently
+    if positive_score > SENTIMENT_THRESHOLD:
+        pos_sentiment = "Yes"
+    elif neutral_score > 0.5 or positive_score < 0.15:
         pos_sentiment = "Null"
+    else:
+        pos_sentiment = "No"
+
+    # Determine Neg_sentiment independently (can be Yes even if Pos is Yes)
+    if negative_score > SENTIMENT_THRESHOLD:
+        neg_sentiment = "Yes"
+    elif neutral_score > 0.5 or negative_score < 0.15:
         neg_sentiment = "Null"
+    else:
+        neg_sentiment = "No"
 
     # Intent Booleans - check each category independently
-    donate_intent = "Yes" if intent_scores.get("Donation Inquiry", 0) > THRESHOLD else "No"
-    withdrawn_intent = "Yes" if intent_scores.get("Withdrawn or Unhappy", 0) > THRESHOLD else "No"
+    donate_intent = "Yes" if intent_scores.get("Donation Inquiry", 0) > INTENT_THRESHOLD else "No"
+
+    # Withdrawn Intent with contradiction detection
+    withdrawal_score = intent_scores.get("Withdrawing support or ending relationship", 0)
+
+    # Check for contradictory phrases that indicate they're NOT withdrawing
+    continuing_phrases = ["will continue", "i'll continue", "but continue", "still support",
+                         "keep supporting", "keep donating", "staying", "remain"]
+    text_lower = text.lower()
+    has_continuing_signal = any(phrase in text_lower for phrase in continuing_phrases)
+
+    # If they mention continuing/staying, override withdrawal detection
+    if has_continuing_signal:
+        withdrawn_intent = "No"
+    elif withdrawal_score > WITHDRAWN_THRESHOLD:
+        withdrawn_intent = "Yes"
+    else:
+        withdrawn_intent = "No"
 
     # Organize the Output as Booleans
     return {
