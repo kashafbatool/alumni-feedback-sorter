@@ -11,45 +11,55 @@ sentiment_analyzer = pipeline("sentiment-analysis", model="distilbert-base-uncas
 # "bart-large-mnli" is great for Zero-Shot classification
 intent_classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 
-# Define the buckets you care about (Change these to match your Non-Profit's needs!)
+# Define the categories you care about (Change these to match your Non-Profit's needs!)
+# Sentiment categories
+SENTIMENT_LABELS = ["Positive", "Negative"]
+
+# Intent categories - customize these based on your supervisor's needs
 INTENT_LABELS = [
     "Donation Inquiry",
+    "Withdrawn or Unhappy",
     "Website Issue",
-    "Urgent Request",
     "Complaint",
     "Meeting Request",
     "Thank You",
-    "Update Info",
-    "General Question"
+    "Update Info"
 ]
 
 def analyze_email(text):
     print(f"\nAnalyzing: '{text}'")
 
-    # Run Sentiment
-    # We truncate to 512 chars because BERT has a length limit
+    # Run Sentiment Analysis
     sent_result = sentiment_analyzer(text[:512])[0]
 
-    # Run Intent
+    # Run Intent Classification - get scores for ALL categories
     intent_result = intent_classifier(text, candidate_labels=INTENT_LABELS)
 
-    top_intent = intent_result['labels'][0]
-    sentiment = sent_result['label']
-    sentiment_score = sent_result['score']
+    # Create a dictionary mapping each label to its score
+    intent_scores = dict(zip(intent_result['labels'], intent_result['scores']))
 
-    # Fix for neutral intents being misclassified as negative
-    # If the intent is clearly neutral/informational, override sentiment
-    neutral_intents = ["Meeting Request", "Update Info", "General Question", "Donation Inquiry"]
+    # BOOLEAN APPROACH: Set threshold for "Yes" (e.g., > 30% confidence = Yes)
+    THRESHOLD = 0.30
 
-    if top_intent in neutral_intents and sentiment == "NEGATIVE":
-        sentiment = "NEUTRAL"
+    # Sentiment Booleans
+    pos_sentiment = "Yes" if sent_result['label'] == "POSITIVE" and sent_result['score'] > 0.6 else "No"
+    neg_sentiment = "Yes" if sent_result['label'] == "NEGATIVE" and sent_result['score'] > 0.6 else "No"
 
-    # Organize the Output
+    # If neither is confident, mark as Null
+    if sent_result['score'] <= 0.6:
+        pos_sentiment = "Null"
+        neg_sentiment = "Null"
+
+    # Intent Booleans - check each category independently
+    donate_intent = "Yes" if intent_scores.get("Donation Inquiry", 0) > THRESHOLD else "No"
+    withdrawn_intent = "Yes" if intent_scores.get("Withdrawn or Unhappy", 0) > THRESHOLD else "No"
+
+    # Organize the Output as Booleans
     return {
-        "Sentiment": sentiment,
-        "Sentiment_Score": round(sentiment_score, 3),
-        "Top_Intent": top_intent,
-        "Intent_Score": round(intent_result['scores'][0], 3)
+        "Pos_sentiment": pos_sentiment,
+        "Neg_sentiment": neg_sentiment,
+        "Donate_Intent": donate_intent,
+        "Withdrawn_Intent": withdrawn_intent
     }
 
 # --- TEST ZONE ---
