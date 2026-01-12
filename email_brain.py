@@ -12,7 +12,16 @@ sentiment_analyzer = pipeline("sentiment-analysis", model="distilbert-base-uncas
 intent_classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 
 # Define the buckets you care about (Change these to match your Non-Profit's needs!)
-INTENT_LABELS = ["Donation Inquiry", "Complaint", "Meeting Request", "Thank You", "Update Info"]
+INTENT_LABELS = [
+    "Donation Inquiry",
+    "Website Issue",
+    "Urgent Request",
+    "Complaint",
+    "Meeting Request",
+    "Thank You",
+    "Update Info",
+    "General Question"
+]
 
 def analyze_email(text):
     print(f"\nAnalyzing: '{text}'")
