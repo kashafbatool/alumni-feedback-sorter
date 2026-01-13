@@ -13,6 +13,8 @@ An AI-powered email sentiment and intent analyzer for processing alumni feedback
 - ✅ **Dual Sentiment Detection**: Independently detects positive AND negative sentiments (supports mixed emotions)
 - ✅ **Intent Classification**: Identifies donation inquiries and withdrawal intent
 - ✅ **Smart Contradiction Detection**: Recognizes when someone says "I'll continue" despite complaints
+- ✅ **Pre-filtering**: Automatically filters out administrative emails (address updates, unsubscribes, etc.)
+- ✅ **Google Sheets Integration**: Directly upload analyzed results to Google Sheets
 - ✅ **Boolean Output**: Returns Yes/No/Null for easy spreadsheet filtering
 - ✅ **100% Accuracy**: Tested on withdrawal detection edge cases
 - ✅ **Fast Processing**: Uses M-series Mac GPU acceleration (MPS)
@@ -40,6 +42,9 @@ Each email is analyzed and tagged with 4 Boolean categories:
 
 ```bash
 pip install transformers torch pandas openpyxl
+
+# Optional: For Google Sheets integration
+pip install gspread google-auth
 ```
 
 **Library Versions (tested):**
@@ -47,6 +52,8 @@ pip install transformers torch pandas openpyxl
 - `torch`: 2.8.0
 - `pandas`: 2.3.3
 - `openpyxl`: 3.1.5
+- `gspread`: 6.1.4 (optional)
+- `google-auth`: 2.37.0 (optional)
 
 ## Usage
 
@@ -227,9 +234,23 @@ First run downloads ~1.5GB of models. This is normal and only happens once.
 ### SSL Warning (LibreSSL)
 This warning is harmless and doesn't affect functionality. Ignore it.
 
+## Google Sheets Integration
+
+Upload your analyzed results directly to Google Sheets!
+
+**Quick Start:** See [QUICKSTART_SHEETS.md](QUICKSTART_SHEETS.md)
+
+**Detailed Setup:** See [GOOGLE_SHEETS_SETUP.md](GOOGLE_SHEETS_SETUP.md)
+
+**One-command usage:**
+```bash
+./process_and_upload.sh "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
+```
+
 ## Next Steps / Future Enhancements
 
-- [ ] Google Sheets integration (direct write)
+- [x] Google Sheets integration (direct write) ✅
+- [x] Pre-filtering for administrative emails ✅
 - [ ] Gmail API integration (auto-fetch emails)
 - [ ] Raiser's Edge CRM integration
 - [ ] Staff assignment lookup
