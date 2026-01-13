@@ -103,7 +103,7 @@ def analyze_email(text):
 
 # --- TEST ZONE ---
 # Try it with a fake donor email
-fake_email = "I've been trying to donate on your website for 20 minutes but it keeps crashing. Can someone call me?"
+fake_email = "Your new policy regarding sharing of data with the state authorities really concerns me. I do not want my donaitons going to suveil and reoprt students to this government."
 
 results = analyze_email(fake_email)
 print("-" * 30)
