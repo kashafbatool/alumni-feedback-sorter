@@ -1,0 +1,16 @@
+# Core dependencies
+pandas>=2.0.0
+openpyxl>=3.0.0
+
+# ML models for sentiment and intent analysis
+transformers>=4.30.0
+torch>=2.0.0
+
+# Gmail API
+google-auth>=2.15.0
+google-auth-oauthlib>=1.0.0
+google-auth-httplib2>=0.1.0
+google-api-python-client>=2.0.0
+
+# Google Sheets API
+gspread>=5.0.0
