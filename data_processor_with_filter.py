@@ -42,27 +42,36 @@ if len(emails_to_process) > 0:
     formatted_df['Last Name'] = emails_to_process.get('Last Name', '')
     formatted_df['Email Address'] = emails_to_process.get('Email Address', '')
 
-    # Map sentiment to Positive/Negative (only 2 options)
+    # Map sentiment to Positive/Negative (only 2 options - never empty!)
     def determine_sentiment(row):
-        # If any positive signal, mark as Positive
-        if row['Pos_sentiment'] == 'Yes':
+        # Always return either Positive or Negative (never empty/null/NaN)
+        try:
+            pos = str(row['Pos_sentiment']).strip() if pd.notna(row.get('Pos_sentiment')) else 'No'
+            neg = str(row['Neg_sentiment']).strip() if pd.notna(row.get('Neg_sentiment')) else 'No'
+        except:
+            # If anything goes wrong, default to Negative
+            return 'Negative'
+
+        # If positive detected, return Positive
+        if pos == 'Yes':
             return 'Positive'
         # If any negative signal, mark as Negative
-        elif row['Neg_sentiment'] == 'Yes':
+        elif neg == 'Yes':
             return 'Negative'
         # Default to Negative for uncertain cases (staff will review)
+        # This ensures we NEVER have empty/NaN sentiment
         else:
             return 'Negative'
 
-    formatted_df['Positive or Negative?'] = results.apply(determine_sentiment, axis=1)
-    formatted_df['Received By'] = emails_to_process.get('Received By', '')
-    formatted_df['Date Received'] = emails_to_process.get('Date Received', datetime.today().strftime('%Y-%m-%d'))
-    formatted_df['Received by Email, Phone, or in Person?'] = emails_to_process.get('Contact Method', 'Email')
+    formatted_df['Positive or Negative?'] = results.apply(determine_sentiment, axis=1).fillna('Negative')
+    formatted_df['Received By'] = ''
+    formatted_df['Date Received'] = emails_to_process['Date Received'].values
+    formatted_df['Received by Email, Phone, or in Person?'] = ''
     formatted_df['Email Text/Synopsis of Conversation/Notes'] = emails_to_process['Body'].values
-    formatted_df['Paused Giving OR Changed bequest intent?'] = results['Withdrawn_Intent'].values
-    formatted_df['Constituent?'] = emails_to_process.get('Constituent?', '')
-    formatted_df['RM or team member assigned for Response'] = emails_to_process.get('Assigned To', '')
-    formatted_df['Response Complete?'] = 'No'
+    formatted_df['Paused Giving OR Changed bequest intent?'] = results['Giving_Status'].values
+    formatted_df['Constituent?'] = ''
+    formatted_df['RM or team member assigned for Response'] = ''
+    formatted_df['Response Complete?'] = ''
     formatted_df['Date of Response'] = ''
     formatted_df['Imported in RE? (Grace will update this column)'] = ''
 

@@ -24,9 +24,9 @@ FILTER_KEYWORDS = {
         "change my phone", "new phone number", "mailing address"
     ],
     "admin_updates": [
-        "unsubscribe", "remove me", "opt out", "stop sending",
         "automatic reply", "out of office", "auto-reply", "autoreply",
-        "vacation message", "away from", "do not reply"
+        "vacation message", "away from", "do not reply",
+        "iam.gserviceaccount.com", "service account", "unique id"
     ],
     "forwarded_chains": [
         "forwarded message", "fwd:", "fw:", "begin forwarded message",
@@ -36,6 +36,21 @@ FILTER_KEYWORDS = {
     "generic_acknowledgments": [
         "thanks for the update", "noted", "thank you for letting",
         "acknowledged", "got it", "received", "will do"
+    ],
+    "parent_positive_only": [
+        "parent of class of", "as a parent", "proud parent", "my student",
+        "our student", "my child", "our child", "my daughter", "my son"
+    ],
+    "technical_support": [
+        "reset my password", "reset my account", "can't log in", "cannot log in",
+        "login not working", "portal login", "forgot password", "password reset",
+        "access my account", "unlock my account", "reset password"
+    ],
+    "event_inquiries": [
+        "reunion schedule", "event schedule", "ticket prices", "accommodation suggestions",
+        "what time", "when is the", "where is the", "how do i register", "rsvp",
+        "planning to attend", "attend the reunion", "attend the event",
+        "schedule for", "agenda for", "registration details"
     ]
 }
 
@@ -46,7 +61,16 @@ FEEDBACK_KEYWORDS = [
     "issue with", "problem with", "broken", "not working", "error",
     "disagree", "oppose", "against", "don't support", "unhappy",
     "love", "appreciate", "excellent", "wonderful", "impressed",
-    "complaint", "feedback", "experience with", "opinion on"
+    "complaint", "feedback", "experience with", "opinion on",
+    "unsubscribe", "remove me", "opt out", "stop sending", "no longer want",
+    # Bequest and giving-related keywords
+    "will", "estate", "bequest", "planned giving", "legacy", "financial plans",
+    "personal plans", "commitments", "no longer directed", "removing from",
+    "update my plans", "change my plans", "trust", "confidence",
+    # Strong formal negative language
+    "infuriating", "infuriated", "eroded", "undermined", "betrayed",
+    "outraged", "alarmed", "appalled", "disgraceful", "unacceptable",
+    "course-correct", "rebuild trust", "lost confidence", "serious reflection"
 ]
 
 def is_email_chain(text):
@@ -147,8 +171,30 @@ def should_filter(text, subject=""):
         if "forwarded_chains" in filter_matches and filter_matches["forwarded_chains"] >= 3:
             return True  # FILTER
 
+        if "technical_support" in filter_matches and filter_matches["technical_support"] >= 1:
+            return True  # FILTER - technical support requests not relevant to alumni tracking
+
+        if "event_inquiries" in filter_matches and filter_matches["event_inquiries"] >= 1:
+            return True  # FILTER - event logistics questions not alumni feedback
+
+    # Check for parent emails - filter if only positive thank-you with no concerns
+    text_lower = full_text.lower()
+    is_parent_email = "parent_positive_only" in filter_matches and filter_matches["parent_positive_only"] >= 1
+
     # Check for feedback keywords (positive signal)
     feedback_keyword_count = check_feedback_keywords(full_text)
+
+    # Check for negative/concern keywords specifically
+    negative_keywords = ["concern", "worried", "disappointed", "frustrated", "upset", "issue", "problem",
+                        "disagree", "oppose", "unhappy", "complaint", "infuriating", "undermined",
+                        "eroded", "betrayed", "outraged", "alarmed", "appalled", "unacceptable",
+                        "will", "estate", "bequest", "financial plans", "no longer directed",
+                        "stop giving", "pause", "suspend", "discontinue", "step back"]
+    has_negative_concerns = any(kw in text_lower for kw in negative_keywords)
+
+    # If it's a parent email with only positive feedback and no concerns, filter it out
+    if is_parent_email and not has_negative_concerns:
+        return True  # FILTER - parent positive thank-you not relevant to alumni tracking
 
     # Run AI Intent Classification for feedback
     intent_result = intent_classifier(full_text[:512], candidate_labels=FEEDBACK_LABELS)

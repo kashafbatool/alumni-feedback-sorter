@@ -76,29 +76,49 @@ def analyze_email(text):
     # Intent Booleans - check each category independently
     donate_intent = "Yes" if intent_scores.get("Donation Inquiry", 0) > INTENT_THRESHOLD else "No"
 
-    # Withdrawn Intent with contradiction detection
-    withdrawal_score = intent_scores.get("Withdrawing support or ending relationship", 0)
-
-    # Check for contradictory phrases that indicate they're NOT withdrawing
-    continuing_phrases = ["will continue", "i'll continue", "but continue", "still support",
-                         "keep supporting", "keep donating", "staying", "remain"]
+    # Bequest/Giving Intent Detection (4 categories)
     text_lower = text.lower()
-    has_continuing_signal = any(phrase in text_lower for phrase in continuing_phrases)
 
-    # If they mention continuing/staying, override withdrawal detection
-    if has_continuing_signal:
-        withdrawn_intent = "No"
-    elif withdrawal_score > WITHDRAWN_THRESHOLD:
-        withdrawn_intent = "Yes"
+    # Keywords for each category
+    paused_keywords = ["paused", "pausing", "suspend", "suspending", "stop giving", "stopped giving",
+                       "halt", "halting", "temporarily stop", "hold off", "step back", "stepping back",
+                       "take a step back", "taking a step back", "pause my", "pause our",
+                       "discontinue", "discontinuing", "end my support", "ending my support"]
+    resumed_keywords = ["resumed", "resuming", "restart", "restarting", "begin again", "start again",
+                        "continue giving", "will continue", "keep giving", "keep donating"]
+    removed_bequest_keywords = ["remove", "removed", "revoke", "revoked", "changed my will",
+                                "updated my will", "no longer in my will", "taken out of will",
+                                "eliminate", "eliminated", "withdrawn from estate"]
+    added_bequest_keywords = ["added to will", "included in will", "left in will", "bequest",
+                              "estate plan", "planned giving", "legacy gift", "leaving to"]
+
+    # Check for each category (order matters - most specific first)
+    if any(keyword in text_lower for keyword in removed_bequest_keywords):
+        giving_status = "Removed bequest"
+    elif any(keyword in text_lower for keyword in added_bequest_keywords):
+        giving_status = "Added bequest"
+    elif any(keyword in text_lower for keyword in resumed_keywords):
+        giving_status = "Resumed giving"
+    elif any(keyword in text_lower for keyword in paused_keywords):
+        giving_status = "Paused giving"
     else:
-        withdrawn_intent = "No"
+        # Fall back to general withdrawal detection
+        withdrawal_score = intent_scores.get("Withdrawing support or ending relationship", 0)
+        if withdrawal_score > WITHDRAWN_THRESHOLD:
+            # Check if it's likely about bequest or regular giving
+            if any(word in text_lower for word in ["will", "estate", "bequest", "legacy", "planned"]):
+                giving_status = "Removed bequest"
+            else:
+                giving_status = "Paused giving"
+        else:
+            giving_status = "No"  # No change detected - default to "No"
 
-    # Organize the Output as Booleans
+    # Organize the Output
     return {
         "Pos_sentiment": pos_sentiment,
         "Neg_sentiment": neg_sentiment,
         "Donate_Intent": donate_intent,
-        "Withdrawn_Intent": withdrawn_intent
+        "Giving_Status": giving_status
     }
 
 # --- TEST ZONE ---

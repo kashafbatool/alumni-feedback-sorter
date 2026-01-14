@@ -1,16 +1,32 @@
-Body
-"I've been trying to donate on your website for 20 minutes but it keeps crashing. Can someone call me?"
-"Thank you so much for the scholarship! It changed my life and I'm forever grateful."
-"Can we schedule a meeting next week to discuss partnership opportunities?"
-"I need to update my mailing address in your system. My new address is 123 Main St."
-"Your staff was incredibly rude when I called yesterday. This is unacceptable."
-"I'm interested in making a monthly donation. What are my options?"
-"Just wanted to say thank you for all the amazing work you do in the community!"
-"The event last week was poorly organized. The venue was too small and there wasn't enough food."
-"How do I access my donation receipt for tax purposes?"
-"I would love to volunteer. Can someone contact me about opportunities?"
-"Please cancel my monthly donation effective immediately."
-"I'm done with this organization. Remove me from all mailing lists."
-"After this experience, I will no longer be supporting the alumni association."
-"I'm unhappy with the direction you're taking, but I'll continue my monthly donation."
-"Can you help me increase my donation to $100 per month?"
+First Name,Last Name,Email Address,Body,Date Received
+Sarah,Johnson,sarah.j@gmail.com,"Thank you so much for the scholarship! It changed my life and I'm forever grateful. I couldn't have finished my degree without this support.",2025-01-10
+Michael,Chen,mchen@yahoo.com,"I'm extremely disappointed with how the recent fundraising event was handled. The venue was overcrowded and there wasn't enough seating. Very unprofessional.",2025-01-10
+Emily,Rodriguez,emily.r@outlook.com,"I'm really concerned about the new policy regarding alumni data privacy. I don't feel comfortable with how my information is being shared. This worries me a lot.",2025-01-11
+David,Thompson,dthompson@tcnj.edu,"The campus visit last month was absolutely wonderful! Seeing the new library brought back so many memories. I'm so proud of how the school has grown and I'm excited to stay involved.",2025-01-11
+Jessica,Williams,jwilliams@hotmail.com,"I've been a donor for 15 years but after seeing how you treated the faculty during the strike, I'm deeply troubled. This isn't the institution I remember and loved.",2025-01-11
+Robert,Martinez,robert.m@gmail.com,"Your leadership during the pandemic was exceptional. The way you supported students and kept everyone safe was truly impressive. I'm proud to be an alum!",2025-01-12
+Amanda,Taylor,ataylor@icloud.com,"Just wanted to say thank you for all the amazing work you do in the community! The mentorship program has been wonderful and I'm so proud to be an alum.",2025-01-12
+Christopher,Lee,chris.lee@company.com,"I'm frustrated with the lack of transparency around the budget cuts. Alumni deserve to know what's happening with our donations. This is very concerning to me.",2025-01-12
+Lisa,Anderson,lisa.a@gmail.com,"The homecoming celebration was fantastic! I reconnected with so many old friends and the new student center is beautiful. What a great weekend!",2025-01-13
+James,Garcia,jgarcia@yahoo.com,"I disagree strongly with the decision to eliminate the arts program. This was always such an important part of campus life and I'm very disappointed by this choice.",2025-01-13
+Nicole,White,nwhite@outlook.com,"I wanted to share how much the career services office helped me land my dream job. The support I received was invaluable and I'm so grateful for everything.",2025-01-13
+Daniel,Harris,dharris@gmail.com,"The way the administration handled the recent controversy was completely unacceptable. I've lost faith in the leadership and I'm seriously reconsidering my involvement.",2025-01-14
+Karen,Clark,kclark@icloud.com,"After this experience with your staff, I will no longer be supporting the annual fund. However, I'll continue my scholarship endowment because I believe in helping students.",2025-01-14
+Brian,Lewis,blewis@company.com,"I'm unhappy with the direction you're taking with the new initiatives, but I'll continue my monthly donation of $100 because I still believe in the mission.",2025-01-14
+Michelle,Walker,mwalker@gmail.com,"The alumni speaker series has been absolutely phenomenal this year! Every event I've attended has been engaging and inspiring. Thank you for putting together such quality programming.",2025-01-15
+Kevin,Hall,khall@yahoo.com,"I'm concerned about the lack of diversity initiatives on campus. We need to do better and I'm worried we're falling behind other schools in this critical area.",2025-01-15
+Rachel,Young,rachel.y@outlook.com,"I'm so grateful for the career networking opportunities you've provided! The alumni directory helped me find a mentor in my field and it's been invaluable for my career growth.",2025-01-15
+Steven,King,sking@gmail.com,"The sustainability efforts on campus are impressive! I love seeing the solar panels and the commitment to reducing carbon emissions. This makes me proud to support the school.",2025-01-16
+Angela,Wright,awright@icloud.com,"I'm deeply upset about how the Title IX investigation was handled. Survivors deserve better and this response was inadequate. I expected more from this institution.",2025-01-16
+Thomas,Lopez,tlopez@company.com,"I absolutely love the new alumni magazine! The articles are so well-written and it's wonderful to stay connected with what's happening on campus. Keep up the great work!",2025-01-16
+Patricia,Moore,pmoore@gmail.com,"The recent tuition increase is outrageous and puts higher education further out of reach for working families. I'm really disappointed by this decision and the lack of justification.",2025-01-17
+Gregory,Martinez,gmartinez@yahoo.com,"Thank you for hosting such a wonderful reunion! It was incredible to see everyone after all these years. The event was perfectly organized and I had an amazing time.",2025-01-17
+Jennifer,Taylor,jtaylor@outlook.com,"I'm thrilled about the new STEM building! This investment in science education is exactly what we need. I'm excited to contribute to this important project.",2025-01-17
+William,Anderson,wanderson@gmail.com,"The treatment of adjunct faculty is shameful and doesn't align with the values this institution claims to uphold. I'm very concerned about this ongoing issue.",2025-01-18
+Elizabeth,Thomas,ethomas@icloud.com,"I appreciate all the hard work that went into the capital campaign. The results speak for themselves and I'm proud to have been part of this effort!",2025-01-18
+Richard,Jackson,rjackson@company.com,"Your response to student mental health concerns has been inadequate. More resources are desperately needed and I'm worried about the wellbeing of current students.",2025-01-18
+Maria,White,mwhite@yahoo.com,"The scholarship I received changed the trajectory of my entire life. I'm now in a position to give back and I'm honored to establish my own scholarship fund.",2025-01-19
+Charles,Harris,charris@gmail.com,"I'm troubled by the lack of support for student activism on campus. Free speech and civic engagement should be encouraged, not suppressed. This concerns me greatly.",2025-01-19
+Linda,Martin,lmartin@outlook.com,"The volunteer day was such a rewarding experience! Working alongside current students to give back to the community reminded me why I love being part of this alumni network.",2025-01-19
+Joseph,Thompson,jthompson@icloud.com,"After reading about the financial mismanagement, I've lost confidence in the administration. Better oversight and accountability are urgently needed.",2025-01-20
+Barbara,Garcia,bgarcia@gmail.com,"The improvements to campus facilities are remarkable! The investment in infrastructure shows a real commitment to providing students with the best possible environment.",2025-01-20
