@@ -37,6 +37,28 @@ elif os.environ.get('GMAIL_UPLOAD'):
 else:
     EXCEL_FILE = "Alumni_Feedback_Report_Filtered.xlsx"  # From data_processor_with_filter.py
 
+def get_sheets_service():
+    """
+    Get authenticated Google Sheets client
+
+    Returns:
+        gspread.Client object or None if authentication fails
+    """
+    try:
+        scopes = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
+        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=scopes)
+        client = gspread.authorize(creds)
+        return client
+    except FileNotFoundError:
+        print(f"✗ Error: {CREDENTIALS_FILE} not found.")
+        return None
+    except Exception as e:
+        print(f"✗ Authentication error: {e}")
+        return None
+
 def upload_to_sheets(spreadsheet_url, worksheet_name="Sheet1"):
     """
     Upload analyzed alumni feedback to Google Sheets
@@ -62,21 +84,11 @@ def upload_to_sheets(spreadsheet_url, worksheet_name="Sheet1"):
 
     # 2. Authenticate with Google Sheets
     print(f"\n2. Authenticating with Google Sheets...")
-    try:
-        scopes = [
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/drive'
-        ]
-        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=scopes)
-        client = gspread.authorize(creds)
-        print("   ✓ Authentication successful")
-    except FileNotFoundError:
-        print(f"   ✗ Error: {CREDENTIALS_FILE} not found.")
+    client = get_sheets_service()
+    if not client:
         print("   Follow the setup instructions in the script comments.")
         return
-    except Exception as e:
-        print(f"   ✗ Authentication error: {e}")
-        return
+    print("   ✓ Authentication successful")
 
     # 3. Open the spreadsheet
     print(f"\n3. Opening spreadsheet...")

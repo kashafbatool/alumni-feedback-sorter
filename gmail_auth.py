@@ -12,8 +12,9 @@ import pickle
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
-# Gmail API scope - allows reading emails and modifying labels
-SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
+# Gmail API scope - allows reading emails, modifying labels, and sending emails
+SCOPES = ['https://www.googleapis.com/auth/gmail.modify',
+          'https://www.googleapis.com/auth/gmail.send']
 
 def authenticate_gmail():
     """
@@ -72,6 +73,33 @@ def authenticate_gmail():
         print("You're ready to use gmail_to_sheets.py")
 
     print("\n" + "="*80)
+
+def get_gmail_service():
+    """
+    Get authenticated Gmail service for API calls
+
+    Returns:
+        Gmail service object or None if authentication fails
+    """
+    from googleapiclient.discovery import build
+
+    token_file = 'credentials/gmail_token.pickle'
+
+    if not os.path.exists(token_file):
+        print("✗ Error: Not authenticated with Gmail!")
+        print("Run: python3 gmail_auth.py")
+        return None
+
+    with open(token_file, 'rb') as token:
+        creds = pickle.load(token)
+
+    # Refresh if expired
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+        with open(token_file, 'wb') as token:
+            pickle.dump(creds, token)
+
+    return build('gmail', 'v1', credentials=creds)
 
 if __name__ == '__main__':
     authenticate_gmail()
