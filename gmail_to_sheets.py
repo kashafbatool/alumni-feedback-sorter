@@ -80,19 +80,35 @@ def get_email_body(payload):
 
     return ""
 
-def fetch_unread_emails(service, max_results=50):
-    """Fetch unread emails from Gmail inbox"""
+def fetch_unread_emails(service, max_results=500):
+    """Fetch unread emails from Gmail inbox with pagination"""
     print("\n1. Fetching unread emails from Gmail...")
 
     try:
-        # Get list of unread messages
-        results = service.users().messages().list(
-            userId='me',
-            q='is:unread',
-            maxResults=max_results
-        ).execute()
+        # Get list of unread messages with pagination
+        messages = []
+        page_token = None
 
-        messages = results.get('messages', [])
+        while True:
+            results = service.users().messages().list(
+                userId='me',
+                q='is:unread',
+                maxResults=100,  # Fetch 100 at a time
+                pageToken=page_token
+            ).execute()
+
+            batch_messages = results.get('messages', [])
+            messages.extend(batch_messages)
+
+            # Check if there are more pages
+            page_token = results.get('nextPageToken')
+            if not page_token:
+                break  # No more pages
+
+            # Stop if we've reached max_results
+            if len(messages) >= max_results:
+                messages = messages[:max_results]
+                break
 
         if not messages:
             print("   ✓ No unread emails found")
@@ -181,6 +197,37 @@ def mark_as_read(service, message_ids):
     except Exception as e:
         print(f"   ⚠ Warning: Could not mark emails as read: {e}")
 
+def apply_filtered_label(service, message_ids):
+    """Apply 'Untracked' label to messages"""
+    if not message_ids:
+        return
+
+    try:
+        # Get all labels to find the 'Untracked' label ID
+        labels = service.users().labels().list(userId='me').execute()
+        label_id = None
+
+        for label in labels.get('labels', []):
+            if label['name'].lower() == 'untracked':
+                label_id = label['id']
+                break
+
+        if not label_id:
+            print(f"   ⚠ Warning: 'Untracked' label not found in Gmail")
+            return
+
+        # Apply the label to all filtered messages
+        service.users().messages().batchModify(
+            userId='me',
+            body={
+                'ids': message_ids,
+                'addLabelIds': [label_id]
+            }
+        ).execute()
+        print(f"   ✓ Applied 'Untracked' label to {len(message_ids)} emails")
+    except Exception as e:
+        print(f"   ⚠ Warning: Could not apply label: {e}")
+
 def process_and_upload(spreadsheet_url):
     """Main processing pipeline"""
     print("="*80)
@@ -202,7 +249,6 @@ def process_and_upload(spreadsheet_url):
     # Convert to DataFrame
     df = pd.DataFrame(emails)
     message_ids = df['id'].tolist()
-    df = df.drop('id', axis=1)  # Remove id column
 
     print(f"\n2. Pre-filtering emails...")
     df['Should_Filter'] = df['Body'].apply(lambda x: should_filter(x, subject=""))
@@ -210,13 +256,24 @@ def process_and_upload(spreadsheet_url):
     filtered_out = df[df['Should_Filter'] == True]
     emails_to_process = df[df['Should_Filter'] == False]
 
+    # Get message IDs for filtered emails
+    filtered_message_ids = filtered_out['id'].tolist() if len(filtered_out) > 0 else []
+
+    # Now drop the id column for processing
+    df = df.drop('id', axis=1)
+    filtered_out = filtered_out.drop('id', axis=1) if len(filtered_out) > 0 else filtered_out
+    emails_to_process = emails_to_process.drop('id', axis=1) if len(emails_to_process) > 0 else emails_to_process
+
     print(f"   - Filtered out (admin/irrelevant): {len(filtered_out)}")
     print(f"   - Kept for analysis (real feedback): {len(emails_to_process)}")
 
+    # Apply 'Untracked' label to filtered emails
+    if len(filtered_message_ids) > 0:
+        print(f"\n   Applying 'Untracked' label to {len(filtered_message_ids)} emails...")
+        apply_filtered_label(service, filtered_message_ids)
+
     if len(emails_to_process) == 0:
         print("\n✓ All emails were administrative/irrelevant")
-        print("   Marking them as read...")
-        mark_as_read(service, message_ids)
         return
 
     # Analyze sentiment
@@ -295,22 +352,49 @@ def process_and_upload(spreadsheet_url):
     formatted_df.to_excel("Alumni_Feedback_Report_Gmail.xlsx", index=False)
     print(f"   ✓ Analysis complete")
 
-    # Upload to Google Sheets
+    # Group emails by month/year and upload to separate tabs
     print(f"\n4. Uploading to Google Sheets...")
+
+    # Convert Date Received to datetime and extract month/year
+    formatted_df['Date Received'] = pd.to_datetime(formatted_df['Date Received'])
+    formatted_df['Month_Year'] = formatted_df['Date Received'].dt.strftime('%b %Y').str.lower()
+
+    # Group by month/year
+    grouped = formatted_df.groupby('Month_Year')
+
+    print(f"   Found emails from {len(grouped)} different months")
+
     import subprocess
-    result = subprocess.run(
-        ['python3', 'sheets_uploader.py', spreadsheet_url, 'jan 2026'],
-        capture_output=True,
-        text=True,
-        env={**os.environ, 'GMAIL_UPLOAD': 'true'}
-    )
+    upload_success = True
 
-    if result.returncode == 0:
-        print("   ✓ Upload successful!")
+    for month_year, group_df in grouped:
+        # Convert Date Received back to date-only format (remove time)
+        group_df['Date Received'] = group_df['Date Received'].dt.strftime('%Y-%m-%d')
 
-        # Mark emails as read
-        print(f"\n5. Marking processed emails as read...")
-        mark_as_read(service, message_ids)
+        # Remove the helper column before uploading
+        group_df = group_df.drop('Month_Year', axis=1)
+
+        # Save to temporary Excel file for this month
+        temp_file = f"Alumni_Feedback_Report_Gmail_{month_year.replace(' ', '_')}.xlsx"
+        group_df.to_excel(temp_file, index=False)
+
+        print(f"   Uploading {len(group_df)} emails to '{month_year}' tab...")
+
+        result = subprocess.run(
+            ['python3', 'sheets_uploader.py', spreadsheet_url, month_year],
+            capture_output=True,
+            text=True,
+            env={**os.environ, 'GMAIL_UPLOAD': 'true', 'TEMP_FILE': temp_file}
+        )
+
+        if result.returncode != 0:
+            upload_success = False
+            print(f"   ✗ Upload failed for '{month_year}'")
+            if result.stderr:
+                print(f"      Error: {result.stderr}")
+
+    if upload_success:
+        print("   ✓ All uploads successful!")
 
         print("\n" + "="*80)
         print("✓ SUCCESS! All emails processed and uploaded to Google Sheets")

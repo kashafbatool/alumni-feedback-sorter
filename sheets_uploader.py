@@ -30,7 +30,9 @@ CREDENTIALS_FILE = "credentials/service-account.json"
 
 # Check if called from Gmail processor
 import os
-if os.environ.get('GMAIL_UPLOAD'):
+if os.environ.get('TEMP_FILE'):
+    EXCEL_FILE = os.environ.get('TEMP_FILE')  # Use temp file for specific month
+elif os.environ.get('GMAIL_UPLOAD'):
     EXCEL_FILE = "Alumni_Feedback_Report_Gmail.xlsx"  # From gmail_to_sheets.py
 else:
     EXCEL_FILE = "Alumni_Feedback_Report_Filtered.xlsx"  # From data_processor_with_filter.py
@@ -80,15 +82,16 @@ def upload_to_sheets(spreadsheet_url, worksheet_name="Sheet1"):
     print(f"\n3. Opening spreadsheet...")
     try:
         sheet = client.open_by_url(spreadsheet_url)
-        worksheet = sheet.worksheet(worksheet_name)
-        print(f"   ✓ Opened '{sheet.title}' - '{worksheet_name}'")
+        try:
+            worksheet = sheet.worksheet(worksheet_name)
+            print(f"   ✓ Opened '{sheet.title}' - '{worksheet_name}'")
+        except gspread.exceptions.WorksheetNotFound:
+            print(f"   ⚠ Worksheet '{worksheet_name}' not found. Creating it...")
+            worksheet = sheet.add_worksheet(title=worksheet_name, rows=1000, cols=14)
+            print(f"   ✓ Created worksheet '{worksheet_name}'")
     except gspread.exceptions.SpreadsheetNotFound:
         print("   ✗ Error: Spreadsheet not found.")
         print("   Make sure you've shared the sheet with the service account email.")
-        return
-    except gspread.exceptions.WorksheetNotFound:
-        print(f"   ✗ Error: Worksheet '{worksheet_name}' not found.")
-        print(f"   Available worksheets: {[ws.title for ws in sheet.worksheets()]}")
         return
     except Exception as e:
         print(f"   ✗ Error opening spreadsheet: {e}")

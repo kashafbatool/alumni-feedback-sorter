@@ -12,8 +12,8 @@ import pickle
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
-# Gmail API scope - allows reading emails
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+# Gmail API scope - allows reading emails and modifying labels
+SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
 def authenticate_gmail():
     """
