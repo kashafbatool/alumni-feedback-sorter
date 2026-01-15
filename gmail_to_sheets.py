@@ -39,11 +39,25 @@ def get_gmail_service():
     with open(token_file, 'rb') as token:
         creds = pickle.load(token)
 
-    # Refresh if expired
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        with open(token_file, 'wb') as token:
-            pickle.dump(creds, token)
+    # Check if credentials are valid
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            # Try to refresh the token
+            try:
+                print("   ↻ Refreshing expired Gmail token...")
+                creds.refresh(Request())
+                with open(token_file, 'wb') as token:
+                    pickle.dump(creds, token)
+                print("   ✓ Token refreshed successfully")
+            except Exception as e:
+                print(f"   ✗ Token refresh failed: {e}")
+                print("   Please re-authenticate by running: python3 gmail_auth.py")
+                return None
+        else:
+            # No refresh token available - need to re-authenticate
+            print("✗ Error: Gmail token is invalid and cannot be refreshed!")
+            print("Run: python3 gmail_auth.py")
+            return None
 
     return build('gmail', 'v1', credentials=creds)
 
