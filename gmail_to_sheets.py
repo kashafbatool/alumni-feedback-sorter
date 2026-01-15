@@ -95,19 +95,35 @@ def get_email_body(payload):
 
     return ""
 
-def fetch_unread_emails(service, max_results=50):
-    """Fetch unread emails from Gmail inbox"""
+def fetch_unread_emails(service, max_results=500):
+    """Fetch unread emails from Gmail inbox with pagination"""
     print("\n1. Fetching unread emails from Gmail...")
 
     try:
-        # Get list of unread messages
-        results = service.users().messages().list(
-            userId='me',
-            q='is:unread',
-            maxResults=max_results
-        ).execute()
+        # Get list of unread messages with pagination
+        messages = []
+        page_token = None
 
-        messages = results.get('messages', [])
+        while True:
+            results = service.users().messages().list(
+                userId='me',
+                q='is:unread',
+                maxResults=100,  # Fetch 100 at a time
+                pageToken=page_token
+            ).execute()
+
+            batch_messages = results.get('messages', [])
+            messages.extend(batch_messages)
+
+            # Check if there are more pages
+            page_token = results.get('nextPageToken')
+            if not page_token:
+                break  # No more pages
+
+            # Stop if we've reached max_results
+            if len(messages) >= max_results:
+                messages = messages[:max_results]
+                break
 
         if not messages:
             print("   ✓ No unread emails found")
