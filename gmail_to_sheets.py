@@ -305,7 +305,8 @@ def process_and_upload(spreadsheet_url):
                     'Pos_sentiment': 'No',
                     'Neg_sentiment': 'No',
                     'Donate_Intent': 'No',
-                    'Giving_Status': 'No'
+                    'Giving_Status': 'No',
+                    'Positive_Giving_Status': 'No'
                 }
             analyzed_results.append(result)
         except Exception as e:
@@ -315,7 +316,8 @@ def process_and_upload(spreadsheet_url):
                 'Pos_sentiment': 'No',
                 'Neg_sentiment': 'Yes',
                 'Donate_Intent': 'No',
-                'Giving_Status': 'No'
+                'Giving_Status': 'No',
+                'Positive_Giving_Status': 'No'
             })
 
     results = pd.DataFrame(analyzed_results)
@@ -332,11 +334,17 @@ def process_and_upload(spreadsheet_url):
             pos = str(row['Pos_sentiment']).strip() if pd.notna(row.get('Pos_sentiment')) else 'No'
             neg = str(row['Neg_sentiment']).strip() if pd.notna(row.get('Neg_sentiment')) else 'No'
             giving_status = str(row.get('Giving_Status', '')).strip()
+            positive_giving = str(row.get('Positive_Giving_Status', '')).strip()
         except:
             # If anything goes wrong, default to Neutral
             return 'Neutral'
 
-        # PRIORITY: If they're stopping giving or removing bequest, it's ALWAYS Negative
+        # PRIORITY 1: If they're making gifts/adding bequests, it's ALWAYS Positive
+        # Check if positive_giving contains any of the positive keywords (handles comma-separated values)
+        if any(status in positive_giving for status in ['Making gift', 'Resumed giving', 'Added bequest']):
+            return 'Positive'
+
+        # PRIORITY 2: If they're stopping giving or removing bequest, it's ALWAYS Negative
         # Even if they use polite/appreciative language
         if giving_status in ['Paused giving', 'Removed bequest']:
             return 'Negative'
@@ -357,6 +365,7 @@ def process_and_upload(spreadsheet_url):
     formatted_df['Received by Email, Phone, or in Person?'] = ''
     formatted_df['Email Text/Synopsis of Conversation/Notes'] = emails_to_process['Body'].values
     formatted_df['Paused Giving OR Changed bequest intent?'] = results['Giving_Status'].values
+    formatted_df['Making gift, resuming giving, or revising their will to add the College'] = results['Positive_Giving_Status'].values
     formatted_df['Constituent?'] = ''
     formatted_df['RM or team member assigned for Response'] = ''
     formatted_df['Response Complete?'] = ''

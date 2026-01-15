@@ -76,29 +76,42 @@ def analyze_email(text):
     # Intent Booleans - check each category independently
     donate_intent = "Yes" if intent_scores.get("Donation Inquiry", 0) > INTENT_THRESHOLD else "No"
 
-    # Bequest/Giving Intent Detection (4 categories)
-    text_lower = text.lower()
+    # Bequest/Giving Intent Detection (4 categories for negative + 3 for positive)
+    # Normalize whitespace (replace line breaks and multiple spaces with single space)
+    import re
+    text_lower = re.sub(r'\s+', ' ', text.lower())
 
-    # Keywords for each category
+    # Keywords for NEGATIVE giving changes
     paused_keywords = ["paused", "pausing", "suspend", "suspending", "stop giving", "stopped giving",
                        "halt", "halting", "temporarily stop", "hold off", "step back", "stepping back",
                        "take a step back", "taking a step back", "pause my", "pause our",
                        "discontinue", "discontinuing", "end my support", "ending my support"]
-    resumed_keywords = ["resumed", "resuming", "restart", "restarting", "begin again", "start again",
-                        "continue giving", "will continue", "keep giving", "keep donating"]
     removed_bequest_keywords = ["remove", "removed", "revoke", "revoked", "changed my will",
                                 "updated my will", "no longer in my will", "taken out of will",
                                 "eliminate", "eliminated", "withdrawn from estate"]
-    added_bequest_keywords = ["added to will", "included in will", "left in will", "bequest",
-                              "estate plan", "planned giving", "legacy gift", "leaving to"]
 
-    # Check for each category (order matters - most specific first)
+    # Keywords for POSITIVE giving changes
+    resumed_keywords = ["resumed", "resuming", "restart", "restarting", "begin again", "start again",
+                        "continue giving", "will continue", "keep giving", "keep donating"]
+    added_bequest_keywords = ["added to will", "add to will", "added in will", "add in will",
+                              "added to my will", "add to my will", "added in my will", "add in my will",
+                              "add you to my will", "add you in my will", "include you in my will",
+                              "included in will", "include in will", "left in will", "leave in will",
+                              "bequest", "estate plan", "planned giving", "legacy gift", "leaving to",
+                              "revising my will to add", "revise my will to add",
+                              "updating my will to include", "update my will to include"]
+    making_gift_keywords = ["making a gift", "make a gift", "making a donation", "make a donation",
+                           "would like to donate", "would like to give", "would like to make a gift",
+                           "want to donate", "want to give", "want to make a gift",
+                           "sending a check", "sending a gift", "send a check", "send a gift",
+                           "making my annual gift", "make my annual gift", "renewing my gift", "renew my gift",
+                           "planning to give", "plan to give", "planning to donate", "plan to donate",
+                           "ready to donate", "ready to give", "intend to donate", "intend to give",
+                           "will be donating", "will be making a gift", "will donate", "will give"]
+
+    # Check for NEGATIVE giving status (order matters - most specific first)
     if any(keyword in text_lower for keyword in removed_bequest_keywords):
         giving_status = "Removed bequest"
-    elif any(keyword in text_lower for keyword in added_bequest_keywords):
-        giving_status = "Added bequest"
-    elif any(keyword in text_lower for keyword in resumed_keywords):
-        giving_status = "Resumed giving"
     elif any(keyword in text_lower for keyword in paused_keywords):
         giving_status = "Paused giving"
     else:
@@ -113,12 +126,28 @@ def analyze_email(text):
         else:
             giving_status = "No"  # No change detected - default to "No"
 
+    # Check for POSITIVE giving status (can have multiple)
+    positive_giving_statuses = []
+
+    if any(keyword in text_lower for keyword in added_bequest_keywords):
+        positive_giving_statuses.append("Added bequest")
+
+    if any(keyword in text_lower for keyword in resumed_keywords):
+        positive_giving_statuses.append("Resumed giving")
+
+    if any(keyword in text_lower for keyword in making_gift_keywords):
+        positive_giving_statuses.append("Making gift")
+
+    # Combine multiple statuses with comma, or "No" if none
+    positive_giving_status = ", ".join(positive_giving_statuses) if positive_giving_statuses else "No"
+
     # Organize the Output
     return {
         "Pos_sentiment": pos_sentiment,
         "Neg_sentiment": neg_sentiment,
         "Donate_Intent": donate_intent,
-        "Giving_Status": giving_status
+        "Giving_Status": giving_status,
+        "Positive_Giving_Status": positive_giving_status
     }
 
 # --- TEST ZONE ---

@@ -108,12 +108,16 @@ def generate_html_report(weekly_data, start_date, end_date):
     negative_count = sentiment_counts.get('Negative', 0)
     neutral_count = sentiment_counts.get('Neutral', 0)
 
-    # Giving status counts
+    # Negative giving status counts
     giving_status_counts = weekly_data['Paused Giving OR Changed bequest intent?'].value_counts()
     paused_giving = giving_status_counts.get('Paused giving', 0)
     removed_bequest = giving_status_counts.get('Removed bequest', 0)
-    resumed_giving = giving_status_counts.get('Resumed giving', 0)
-    added_bequest = giving_status_counts.get('Added bequest', 0)
+
+    # Positive giving status counts (handle comma-separated values)
+    positive_giving_col = weekly_data['Making gift, resuming giving, or revising their will to add the College']
+    making_gift = positive_giving_col.str.contains('Making gift', na=False).sum()
+    resumed_giving = positive_giving_col.str.contains('Resumed giving', na=False).sum()
+    added_bequest = positive_giving_col.str.contains('Added bequest', na=False).sum()
 
     # Format date range
     date_range = f"{start_date.strftime('%B %d')} - {end_date.strftime('%B %d, %Y')}"
@@ -160,8 +164,9 @@ def generate_html_report(weekly_data, start_date, end_date):
                 <li class="alert">🚨 Removed Bequests: {removed_bequest}</li>
         """
 
-    if resumed_giving > 0 or added_bequest > 0:
+    if making_gift > 0 or resumed_giving > 0 or added_bequest > 0:
         html += f"""
+                <li>✅ Making Gift: {making_gift}</li>
                 <li>✅ Resumed Giving: {resumed_giving}</li>
                 <li>✅ Added Bequests: {added_bequest}</li>
         """
@@ -176,7 +181,8 @@ def generate_html_report(weekly_data, start_date, end_date):
                 <th>Date</th>
                 <th>From</th>
                 <th>Sentiment</th>
-                <th>Giving Status</th>
+                <th>Negative Giving Status</th>
+                <th>Positive Giving Status</th>
                 <th>Email Text</th>
             </tr>
     """
@@ -189,6 +195,7 @@ def generate_html_report(weekly_data, start_date, end_date):
         email_addr = row.get('Email Address', '')
         sentiment = row.get('Positive or Negative?', 'Neutral')
         giving_status = row.get('Paused Giving OR Changed bequest intent?', 'No')
+        positive_giving_status = row.get('Making gift, resuming giving, or revising their will to add the College', 'No')
         email_text = row.get('Email Text/Synopsis of Conversation/Notes', '')
 
         # Determine row class based on sentiment
@@ -198,9 +205,13 @@ def generate_html_report(weekly_data, start_date, end_date):
         if len(str(email_text)) > 500:
             email_text = str(email_text)[:500] + "..."
 
-        # Highlight critical giving status
+        # Highlight critical negative giving status
         if giving_status in ['Paused giving', 'Removed bequest']:
             giving_status = f'<span class="alert">{giving_status}</span>'
+
+        # Highlight positive giving status
+        if positive_giving_status in ['Making gift', 'Resumed giving', 'Added bequest']:
+            positive_giving_status = f'<strong>{positive_giving_status}</strong>'
 
         html += f"""
             <tr class="{row_class}">
@@ -208,6 +219,7 @@ def generate_html_report(weekly_data, start_date, end_date):
                 <td>{first_name} {last_name}<br><small>{email_addr}</small></td>
                 <td>{sentiment}</td>
                 <td>{giving_status}</td>
+                <td>{positive_giving_status}</td>
                 <td class="email-text">{email_text}</td>
             </tr>
         """
@@ -294,9 +306,16 @@ Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
     negative_count = sentiment_counts.get('Negative', 0)
     neutral_count = sentiment_counts.get('Neutral', 0)
 
+    # Negative giving status counts
     giving_status_counts = weekly_data['Paused Giving OR Changed bequest intent?'].value_counts()
     paused_giving = giving_status_counts.get('Paused giving', 0)
     removed_bequest = giving_status_counts.get('Removed bequest', 0)
+
+    # Positive giving status counts (handle comma-separated values)
+    positive_giving_col = weekly_data['Making gift, resuming giving, or revising their will to add the College']
+    making_gift = positive_giving_col.str.contains('Making gift', na=False).sum()
+    resumed_giving = positive_giving_col.str.contains('Resumed giving', na=False).sum()
+    added_bequest = positive_giving_col.str.contains('Added bequest', na=False).sum()
 
     date_range = f"{start_date.strftime('%B %d')} - {end_date.strftime('%B %d, %Y')}"
 
@@ -320,6 +339,14 @@ ALERTS:
 🚨 Removed Bequests: {removed_bequest}
 """
 
+    if making_gift > 0 or resumed_giving > 0 or added_bequest > 0:
+        text += f"""
+POSITIVE ACTIONS:
+✅ Making Gift: {making_gift}
+✅ Resumed Giving: {resumed_giving}
+✅ Added Bequests: {added_bequest}
+"""
+
     text += "\n\nDETAILED EMAIL LOG\n==================\n"
 
     # Add email entries
@@ -330,13 +357,15 @@ ALERTS:
         email_addr = row.get('Email Address', '')
         sentiment = row.get('Positive or Negative?', 'Neutral')
         giving_status = row.get('Paused Giving OR Changed bequest intent?', 'No')
+        positive_giving_status = row.get('Making gift, resuming giving, or revising their will to add the College', 'No')
         email_text = row.get('Email Text/Synopsis of Conversation/Notes', '')
 
         text += f"""
 Date: {date_str}
 From: {first_name} {last_name} ({email_addr})
 Sentiment: {sentiment}
-Giving Status: {giving_status}
+Negative Giving Status: {giving_status}
+Positive Giving Status: {positive_giving_status}
 Email Text:
 {email_text}
 {'-'*80}
