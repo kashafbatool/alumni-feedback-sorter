@@ -1,119 +1,200 @@
 # Alumni Feedback Sorter
 
-An AI-powered email sentiment and intent analyzer for processing alumni feedback at scale. This tool automatically categorizes emails by sentiment (positive/negative) and intent (donation inquiries, withdrawals, etc.) using transformer-based machine learning models.
+An AI-powered email sentiment and intent analyzer for processing TCNJ alumni feedback automatically. This tool fetches emails from Gmail, categorizes them by sentiment (Positive/Negative/Neutral) and giving status changes, and uploads results directly to Google Sheets.
 
-## Project Overview
+## Overview
 
-**Problem:** The alumni inbox receives high volumes of feedback ranging from very negative to very supportive. Manually categorizing and logging these emails in a spreadsheet is extremely time-intensive, especially during peak periods.
+**Problem:** The alumni relations inbox receives high volumes of feedback ranging from very negative to very supportive. Manually categorizing and logging these emails in a spreadsheet is extremely time-intensive, especially during peak periods.
 
-**Solution:** An automated email analysis system that reads incoming feedback, categorizes it by sentiment and intent, and generates an Excel report ready for staff review.
+**Solution:** An automated email analysis system that fetches emails from Gmail, filters out administrative emails, analyzes sentiment and giving intent, and uploads results to Google Sheets - all automatically.
 
 ## Features
 
-- ✅ **Dual Sentiment Detection**: Independently detects positive AND negative sentiments (supports mixed emotions)
-- ✅ **Intent Classification**: Identifies donation inquiries and withdrawal intent
-- ✅ **Smart Contradiction Detection**: Recognizes when someone says "I'll continue" despite complaints
-- ✅ **Pre-filtering**: Automatically filters out administrative emails (address updates, unsubscribes, etc.)
-- ✅ **Google Sheets Integration**: Directly upload analyzed results to Google Sheets
-- ✅ **Boolean Output**: Returns Yes/No/Null for easy spreadsheet filtering
-- ✅ **100% Accuracy**: Tested on withdrawal detection edge cases
-- ✅ **Fast Processing**: Uses M-series Mac GPU acceleration (MPS)
+- Fetches unread emails directly from Gmail inbox
+- Filters out non-relevant emails (administrative updates, technical support, event inquiries)
+- Analyzes sentiment with 3 categories: Positive, Negative, Neutral
+- Detects giving status changes: Paused giving, Resumed giving, Removed bequest, Added bequest, No
+- Prioritizes negative sentiment for giving changes (even with polite language)
+- Uploads results to Google Sheets with monthly worksheet tracking
+- Marks processed emails as read to prevent duplicates
+- Sorts emails chronologically (oldest first, newest last)
+- Runs continuously with 5-minute automation option
+- Fast processing with M-series Mac GPU acceleration (MPS)
 
 ## Output Categories
 
-Each email is analyzed and tagged with 4 Boolean categories:
+Each email is analyzed and tagged with:
 
 | Category | Values | Description |
 |----------|--------|-------------|
-| **Pos_sentiment** | Yes/No/Null | Expressing gratitude or happiness |
-| **Neg_sentiment** | Yes/No/Null | Expressing complaint or disappointment |
-| **Donate_Intent** | Yes/No/Null | Asking about donations or receipts |
-| **Withdrawn_Intent** | Yes/No/Null | Ending support or relationship |
+| **Positive or Negative?** | Positive/Negative/Neutral | Overall sentiment classification |
+| **Paused Giving OR Changed bequest intent?** | Paused giving, Resumed giving, Removed bequest, Added bequest, No | Giving status changes |
 
-**Note:** Pos_sentiment and Neg_sentiment are independent - an email can be both Yes (mixed emotions).
+**Important:** Emails with "Paused giving" or "Removed bequest" are ALWAYS classified as Negative, regardless of polite language used.
 
 ## Installation
 
 ### Prerequisites
 - Python 3.9+
-- Mac (M1/M2/M3) or Windows/Linux with CPU
+- Mac (M1/M2/M3) recommended for GPU acceleration
 
 ### Install Dependencies
 
 ```bash
-pip install transformers torch pandas openpyxl
-
-# Optional: For Google Sheets integration
-pip install gspread google-auth
+pip install transformers torch pandas openpyxl gspread google-auth google-auth-oauthlib google-auth-httplib2 googleapiclient
 ```
 
 **Library Versions (tested):**
-- `transformers`: 4.57.3
-- `torch`: 2.8.0
-- `pandas`: 2.3.3
-- `openpyxl`: 3.1.5
-- `gspread`: 6.1.4 (optional)
-- `google-auth`: 2.37.0 (optional)
+- transformers: 4.57.3
+- torch: 2.8.0
+- pandas: 2.3.3
+- openpyxl: 3.1.5
+- gspread: 6.1.4
+- google-auth: 2.37.0
+
+## Setup
+
+### 1. Gmail API Authentication (One-time)
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select existing
+3. Enable **Gmail API**
+4. Create **OAuth 2.0 credentials** (Desktop app)
+5. Download credentials and save as `credentials/gmail_credentials.json`
+6. Run authentication:
+
+```bash
+python3 gmail_auth.py
+```
+
+This will open a browser window to sign in and grant permissions. A token file will be saved for future use.
+
+### 2. Google Sheets Service Account Setup (One-time)
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Enable **Google Sheets API**
+3. Create a **Service Account**:
+   - Name: `alumni-feedback-uploader`
+   - Description: `Service account for uploading alumni feedback to Google Sheets`
+4. Create and download JSON key
+5. Save as `credentials/service-account.json`
+
+6. Get your service account email:
+
+```bash
+python3 sheets_uploader.py --show-email
+```
+
+7. Share your Google Spreadsheet with this email address (Editor permissions)
 
 ## Usage
 
-### Quick Start
+### Manual Processing
 
-1. **Prepare your data**: Create a CSV file with a column named `Body` containing email text:
-
-```csv
-Body
-"Thank you for the scholarship! It changed my life."
-"I want to cancel my monthly donation."
-"Can you help me update my address?"
-```
-
-2. **Update the data processor** (if using a different filename):
-
-Edit `data_processor.py` line 5:
-```python
-df = pd.read_csv("your_filename.csv")  # Change this
-```
-
-3. **Run the analysis**:
+Process unread Gmail emails and upload to Google Sheets:
 
 ```bash
-python3 data_processor.py
+python3 gmail_to_sheets.py "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
 ```
 
-4. **View the results**:
+This will:
+1. Fetch all unread emails from Gmail inbox
+2. Filter out administrative emails
+3. Analyze sentiment and giving status
+4. Upload results to Google Sheets (worksheet: "jan 2026")
+5. Mark processed emails as read
+
+### Automated Processing (Continuous)
+
+Run the processor continuously every 5 minutes:
 
 ```bash
-open Analyzed_Report.xlsx
+python3 gmail_auto_processor.py "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit" 5
 ```
 
-Or view in terminal:
-```bash
-python3 -c "import pandas as pd; df = pd.read_excel('Analyzed_Report.xlsx'); print(df.to_string())"
-```
+Press Ctrl+C to stop.
 
-### Testing with Sample Data
+### CSV Input Option (For Testing)
 
-The project includes test data:
+If you want to test with a CSV file instead of Gmail:
 
 ```bash
-# Test basic sentiment/intent detection
-python3 data_processor.py
-
-# View results
-open Analyzed_Report.xlsx
+python3 data_processor_with_filter.py
+python3 sheets_uploader.py "YOUR_SHEET_URL"
 ```
 
 ## File Structure
 
 ```
 alumni-feedback-sorter/
-├── email_brain.py              # Core ML models and analysis logic
-├── data_processor.py           # Batch processing script
-├── test_emails.csv             # Sample test data (15 emails)
-├── Analyzed_Report.xlsx        # Output file (generated)
-└── README.md                   # This file
+├── gmail_auth.py              # Gmail OAuth authentication (one-time setup)
+├── gmail_to_sheets.py         # Main processor: Gmail → Analysis → Sheets
+├── gmail_auto_processor.py    # Continuous 5-minute automation wrapper
+├── email_brain.py             # Core ML models and analysis logic
+├── only_filter.py             # Pre-filtering logic for administrative emails
+├── sheets_uploader.py         # Google Sheets upload handler
+├── data_processor_with_filter.py  # CSV input option (for testing)
+├── credentials/
+│   ├── gmail_credentials.json     # Gmail OAuth credentials
+│   ├── gmail_token.pickle         # Gmail authentication token (auto-generated)
+│   └── service-account.json       # Google Sheets service account key
+├── Alumni_Feedback_Report_Filtered.xlsx    # Output from CSV processor
+├── Alumni_Feedback_Report_Gmail.xlsx       # Output from Gmail processor
+└── README.md
 ```
+
+## How It Works
+
+### Email Filtering (Pre-analysis)
+
+The system filters out:
+- **Address updates**: "update my address", "change my email"
+- **Administrative notifications**: "out of office", "automatic reply"
+- **Email chains**: forwarded messages with multiple headers
+- **Link-only emails**: emails containing only URLs
+- **Parent positive-only emails**: thank-yous from parents (alumni tracking only)
+- **Technical support**: password resets, login issues
+- **Event inquiries**: reunion schedules, ticket prices
+
+Real feedback is kept based on keywords like: "concern", "disappointed", "suggest", "bequest", "will", "estate", "infuriating", "eroded", "betrayed"
+
+### Sentiment Analysis
+
+Uses zero-shot classification to independently detect:
+- **Positive signals**: "expressing gratitude or happiness"
+- **Negative signals**: "expressing complaint or disappointment"
+- **Neutral signals**: No strong emotional valence
+
+**Priority Rule:** Emails with "Paused giving" or "Removed bequest" are ALWAYS classified as Negative sentiment, even if they use polite or appreciative language.
+
+### Giving Status Detection
+
+Keyword-based detection with AI fallback:
+
+**Paused giving**: "paused", "suspend", "stop giving", "step back", "discontinue"
+**Resumed giving**: "resumed", "restart", "continue giving"
+**Removed bequest**: "remove", "revoke", "changed my will", "no longer in my will"
+**Added bequest**: "added to will", "bequest", "estate plan", "legacy gift"
+
+If no keywords match, AI scoring determines if withdrawal/bequest language is present.
+
+## Output Format
+
+The Google Sheets output includes 14 columns:
+1. First Name
+2. Last Name
+3. Email Address
+4. Positive or Negative? (Positive/Negative/Neutral)
+5. Received By (blank for staff to fill)
+6. Date Received
+7. Received by Email, Phone, or in Person? (blank for staff to fill)
+8. Email Text/Synopsis of Conversation/Notes
+9. Paused Giving OR Changed bequest intent? (5 options)
+10. Constituent? (blank for staff to fill)
+11. RM or team member assigned for Response (blank for staff to fill)
+12. Response Complete? (blank for staff to fill)
+13. Date of Response (blank for staff to fill)
+14. Imported in RE? (Grace will update this column)
 
 ## Models Used
 
@@ -121,64 +202,69 @@ alumni-feedback-sorter/
    - Fast, lightweight BERT variant
    - Pre-trained on sentiment classification
 
-2. **Intent Classification**: BART-Large-MNLI (facebook/bart-large-mnli)
-   - Zero-shot classification
-   - Allows custom categories without retraining
+2. **Intent Classification**:
+   - BART-Large-MNLI (facebook/bart-large-mnli) for giving status detection
+   - DistilBERT-MNLI (typeform/distilbert-base-uncased-mnli) for pre-filtering
+   - Zero-shot classification allows custom categories without retraining
 
-## How It Works
+## Performance
 
-### Sentiment Detection (Independent)
+**Processing Speed:**
+- 3-5 seconds per email (first run, model loading)
+- 1-2 seconds per email (subsequent runs)
+- Processes 10 emails in ~15-20 seconds
 
-The system uses zero-shot classification with multi-label support to independently detect:
-- **Positive signals**: "expressing gratitude or happiness"
-- **Negative signals**: "expressing complaint or disappointment"
-- **Neutral signals**: "neutral inquiry"
+**Accuracy:**
+- High accuracy on giving status detection with comprehensive keyword lists
+- 90%+ on sentiment classification
+- Handles edge cases and contradictions
 
-**Thresholds:**
-- Pos/Neg: 25% confidence → "Yes"
-- Neutral: 50% confidence → marks both as "Null"
-- Low confidence (<15%): "No"
+## Troubleshooting
 
-### Intent Classification
+### Gmail Authentication Issues
 
-Categories checked:
-- Donation Inquiry (threshold: 20%)
-- Withdrawing support or ending relationship (threshold: 18%)
-- Website Issue
-- Complaint about service
-- Meeting Request
-- Thank You
-- Update Info
+**"Not authenticated with Gmail"**
+→ Run: `python3 gmail_auth.py`
 
-### Smart Contradiction Detection
+**"gmail_credentials.json not found"**
+→ Download OAuth credentials from Google Cloud Console
 
-If an email contains phrases like:
-- "will continue"
-- "I'll continue"
-- "keep donating"
-- "staying"
-- "remain a donor"
+**"The credentials do not contain the necessary fields"**
+→ Delete `credentials/gmail_token.pickle` and re-run `gmail_auth.py`
 
-The system **overrides** withdrawal detection, even if negative language is present.
+### Google Sheets Issues
 
-**Example:**
-> "I'm unhappy with the direction you're taking, but I'll continue my monthly donation."
->
-> Result: `Withdrawn_Intent: No` (correctly identified as staying)
+**"Spreadsheet not found"**
+→ Share the sheet with the service account email (run `python3 sheets_uploader.py --show-email` to see it)
 
-## Example Results
+**"credentials/service-account.json not found"**
+→ Create `credentials` folder and download service account JSON key
 
-| Email | Pos | Neg | Donate | Withdrawn |
-|-------|-----|-----|--------|-----------|
-| "Thank you for the scholarship!" | Yes | Null | No | No |
-| "Cancel my monthly donation." | Null | Yes | No | Yes |
-| "Your staff was rude." | Null | Yes | No | No |
-| "I'm unhappy BUT I'll continue donating." | Null | Yes | No | No |
-| "Can I increase my donation to $100?" | Yes | Yes | Yes | No |
+**"Worksheet 'jan 2026' not found"**
+→ Create a worksheet tab named "jan 2026" in your spreadsheet
+
+### Processing Issues
+
+**"No unread emails found"**
+→ Send test emails to your Gmail account
+
+**Emails not being marked as read**
+→ This is expected - the Gmail API scope is read-only, so emails remain unread (they are still processed correctly)
+
+**Old emails reappearing**
+→ Manually mark emails as read in Gmail, or they will be reprocessed each time
+
+## Security Notes
+
+- Never commit `gmail_token.pickle` to Git (it's in .gitignore)
+- Never commit `gmail_credentials.json` to Git (it's in .gitignore)
+- Never commit `service-account.json` to Git (it's in .gitignore)
+- The Gmail script only has READ access (cannot delete or modify emails)
+- Only share your Google Sheet with the specific service account email
 
 ## Customization
 
-### Adjusting Thresholds
+### Adjusting Detection Thresholds
 
 Edit `email_brain.py` lines 42-44:
 
@@ -188,85 +274,23 @@ WITHDRAWN_THRESHOLD = 0.18     # Withdrawal detection
 SENTIMENT_THRESHOLD = 0.25     # Positive/negative detection
 ```
 
-**Lower values** = more sensitive (catches more, but may have false positives)
-**Higher values** = more conservative (fewer false positives, but may miss some)
+Lower values = more sensitive (catches more, may have false positives)
+Higher values = more conservative (fewer false positives, may miss some)
 
-### Adding New Intent Categories
+### Adding New Filter Keywords
 
-Edit `email_brain.py` lines 19-27:
+Edit `only_filter.py` FILTER_KEYWORDS or FEEDBACK_KEYWORDS dictionaries to customize what gets filtered out vs. kept.
 
-```python
-INTENT_LABELS = [
-    "Donation Inquiry",
-    "Withdrawing support or ending relationship",
-    "Your New Category Here",  # Add here
-    # ... existing categories
-]
-```
+### Changing Worksheet Name
 
-Then add a new Boolean check in the `analyze_email` function (lines 76-94).
-
-## Performance
-
-**Processing Speed:**
-- ~3-5 seconds per email (first run, model loading)
-- ~1-2 seconds per email (subsequent runs)
-- Processes 10 emails in ~15-20 seconds
-
-**Accuracy:**
-- 100% on withdrawal detection test cases
-- 90%+ on sentiment classification
-- Handles edge cases and contradictions
-
-## Troubleshooting
-
-### "Command not found: pip"
-Use `pip3` or `python3 -m pip` instead.
-
-### "Module not found: transformers"
-```bash
-python3 -m pip install transformers torch pandas openpyxl
-```
-
-### Models downloading slowly
-First run downloads ~1.5GB of models. This is normal and only happens once.
-
-### SSL Warning (LibreSSL)
-This warning is harmless and doesn't affect functionality. Ignore it.
-
-## Google Sheets Integration
-
-Upload your analyzed results directly to Google Sheets!
-
-**Quick Start:** See [QUICKSTART_SHEETS.md](QUICKSTART_SHEETS.md)
-
-**Detailed Setup:** See [GOOGLE_SHEETS_SETUP.md](GOOGLE_SHEETS_SETUP.md)
-
-**One-command usage:**
-```bash
-./process_and_upload.sh "https://docs.google.com/spreadsheets/d/YOUR_SHEET_ID/edit"
-```
-
-## Next Steps / Future Enhancements
-
-- [x] Google Sheets integration (direct write) ✅
-- [x] Pre-filtering for administrative emails ✅
-- [ ] Gmail API integration (auto-fetch emails)
-- [ ] Raiser's Edge CRM integration
-- [ ] Staff assignment lookup
-- [ ] Auto-draft response generation
-- [ ] Web dashboard for monitoring
+Edit `gmail_to_sheets.py` line 302 to change the worksheet name (currently "jan 2026" for monthly tracking).
 
 ## Credits
 
 **Project:** Alumni Feedback Sorter (TCNJ Data Science Capstone)
 **Models:** Hugging Face Transformers (DistilBERT, BART)
-**Built with:** Python, PyTorch, Pandas
+**Built with:** Python, PyTorch, Pandas, Gmail API, Google Sheets API
 
 ## License
 
 Educational project - TCNJ Data Science Program
-
----
-
-**Questions?** Contact your project supervisor or check the project one-pager documentation.
