@@ -59,27 +59,31 @@ def get_sheets_service():
         print(f"✗ Authentication error: {e}")
         return None
 
-def upload_to_sheets(spreadsheet_url, worksheet_name="Sheet1"):
+def upload_to_sheets(spreadsheet_url, worksheet_name="Sheet1", excel_file=None):
     """
     Upload analyzed alumni feedback to Google Sheets
 
     Args:
         spreadsheet_url: Full URL of your Google Spreadsheet
         worksheet_name: Name of the worksheet tab (default: "Sheet1")
+        excel_file: Path to Excel file (optional, defaults to EXCEL_FILE)
     """
 
     print("="*80)
     print("GOOGLE SHEETS UPLOADER")
     print("="*80)
 
+    # Use provided file or default
+    file_to_upload = excel_file if excel_file else EXCEL_FILE
+
     # 1. Load the analyzed Excel file
-    print(f"\n1. Loading data from {EXCEL_FILE}...")
+    print(f"\n1. Loading data from {file_to_upload}...")
     try:
-        df = pd.read_excel(EXCEL_FILE)
+        df = pd.read_excel(file_to_upload)
         print(f"   ✓ Loaded {len(df)} rows")
     except FileNotFoundError:
-        print(f"   ✗ Error: {EXCEL_FILE} not found.")
-        print(f"   Run 'python3 data_processor_with_filter.py' first to generate the report.")
+        print(f"   ✗ Error: {file_to_upload} not found.")
+        print(f"   Run data processor first to generate the report.")
         return
 
     # 2. Authenticate with Google Sheets
@@ -125,12 +129,32 @@ def upload_to_sheets(spreadsheet_url, worksheet_name="Sheet1"):
     # 5. Upload to Google Sheets
     print(f"\n5. Uploading to Google Sheets...")
     try:
-        # Clear existing content (optional - comment out if you want to append)
-        worksheet.clear()
+        # Get existing data to check headers and find next empty row
+        existing_data = worksheet.get_all_values()
 
-        # Update with headers + data
-        all_data = [headers] + data_rows
-        worksheet.update('A1', all_data)
+        if len(existing_data) == 0:
+            # Sheet is empty, add headers + data
+            print("   • Sheet is empty, adding headers and data")
+            all_data = [headers] + data_rows
+            worksheet.update('A1', all_data)
+        else:
+            # Sheet has data, append below existing rows
+            existing_headers = existing_data[0]
+            next_row = len(existing_data) + 1
+
+            print(f"   • Found {len(existing_data)} existing rows (including header)")
+            print(f"   • Appending {len(data_rows)} new rows starting at row {next_row}")
+
+            # Match column order to existing headers
+            if existing_headers != headers:
+                print(f"   • Reordering columns to match existing headers")
+                # Reorder DataFrame columns to match existing sheet
+                df_reordered = df.reindex(columns=existing_headers, fill_value="")
+                data_rows = df_reordered.values.tolist()
+                data_rows = [[str(cell) if pd.notna(cell) else "" for cell in row] for row in data_rows]
+
+            # Append data starting at next empty row
+            worksheet.update(f'A{next_row}', data_rows)
 
         print(f"   ✓ Successfully uploaded {len(data_rows)} rows to Google Sheets!")
         print(f"\n   View your sheet: {spreadsheet_url}")
@@ -203,6 +227,7 @@ if __name__ == "__main__":
 
     # Upload to sheets
     spreadsheet_url = sys.argv[1]
-    worksheet_name = sys.argv[2] if len(sys.argv) > 2 else "Sheet1"
+    excel_file = sys.argv[2] if len(sys.argv) > 2 and not sys.argv[2].startswith("Sheet") else None
+    worksheet_name = sys.argv[3] if len(sys.argv) > 3 else "Sheet1"
 
-    upload_to_sheets(spreadsheet_url, worksheet_name)
+    upload_to_sheets(spreadsheet_url, worksheet_name, excel_file)
