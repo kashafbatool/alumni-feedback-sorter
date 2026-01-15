@@ -118,6 +118,23 @@ def generate_html_report(weekly_data, start_date, end_date):
     # Format date range
     date_range = f"{start_date.strftime('%B %d')} - {end_date.strftime('%B %d, %Y')}"
 
+    # Analyze trends
+    positive_pct = (positive_count / total_emails * 100) if total_emails > 0 else 0
+    negative_pct = (negative_count / total_emails * 100) if total_emails > 0 else 0
+    neutral_pct = (neutral_count / total_emails * 100) if total_emails > 0 else 0
+
+    # Determine overall sentiment interpretation
+    if positive_pct > 60:
+        sentiment_interpretation = "This week shows a strongly positive trend with alumni expressing appreciation and satisfaction."
+    elif positive_pct > 40:
+        sentiment_interpretation = "This week shows a balanced mix of feedback with a slight positive lean."
+    elif negative_pct > 50:
+        sentiment_interpretation = "This week shows concerning feedback trends that may require attention."
+    elif negative_pct > 30:
+        sentiment_interpretation = "This week shows mixed feedback with notable concerns that should be addressed."
+    else:
+        sentiment_interpretation = "This week shows mostly neutral engagement with standard alumni communication."
+
     # Build HTML
     html = f"""
     <html>
@@ -125,98 +142,92 @@ def generate_html_report(weekly_data, start_date, end_date):
         <style>
             body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
             h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
-            h2 {{ color: #34495e; margin-top: 30px; }}
-            .stats {{ background-color: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }}
-            .stats ul {{ list-style-type: none; padding: 0; }}
-            .stats li {{ margin: 8px 0; font-size: 16px; }}
-            .alert {{ color: #e74c3c; font-weight: bold; }}
-            table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
-            th {{ background-color: #3498db; color: white; padding: 12px; text-align: left; }}
-            td {{ padding: 10px; border-bottom: 1px solid #ddd; vertical-align: top; }}
-            tr:hover {{ background-color: #f5f5f5; }}
-            .positive {{ background-color: #d4edda; }}
-            .negative {{ background-color: #f8d7da; }}
-            .neutral {{ background-color: #fff3cd; }}
-            .email-text {{ max-width: 400px; white-space: pre-wrap; font-size: 14px; }}
+            h2 {{ color: #34495e; margin-top: 30px; border-bottom: 2px solid #bdc3c7; padding-bottom: 5px; }}
+            .section {{ background-color: #ecf0f1; padding: 20px; border-radius: 5px; margin: 20px 0; }}
+            .trend {{ background-color: #e8f4f8; padding: 15px; border-left: 4px solid #3498db; margin: 15px 0; }}
+            .alert {{ background-color: #f8d7da; padding: 15px; border-left: 4px solid #e74c3c; margin: 15px 0; }}
+            .positive {{ background-color: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }}
+            .metric {{ font-size: 18px; font-weight: bold; color: #2c3e50; }}
+            .interpretation {{ font-style: italic; color: #555; margin-top: 10px; }}
             .link {{ margin-top: 30px; padding: 15px; background-color: #e8f4f8; border-radius: 5px; }}
+            ul {{ line-height: 1.8; }}
         </style>
     </head>
     <body>
         <h1>📊 Weekly Alumni Feedback Summary</h1>
         <p><strong>Period:</strong> {date_range}</p>
 
-        <div class="stats">
-            <h2>Summary Statistics</h2>
+        <h2>📈 Weekly Trends</h2>
+        <div class="trend">
+            <p class="metric">Total Emails: {total_emails}</p>
+            <p>This week, the system processed {total_emails} alumni feedback emails. The breakdown shows:</p>
             <ul>
-                <li><strong>Total Emails Processed:</strong> {total_emails}</li>
-                <li><strong>Positive:</strong> {positive_count} ({positive_count/total_emails*100:.1f}%)</li>
-                <li><strong>Negative:</strong> {negative_count} ({negative_count/total_emails*100:.1f}%)</li>
-                <li><strong>Neutral:</strong> {neutral_count} ({neutral_count/total_emails*100:.1f}%)</li>
-    """
-
-    if paused_giving > 0 or removed_bequest > 0:
-        html += f"""
-                <li class="alert">🚨 Paused Giving: {paused_giving}</li>
-                <li class="alert">🚨 Removed Bequests: {removed_bequest}</li>
-        """
-
-    if resumed_giving > 0 or added_bequest > 0:
-        html += f"""
-                <li>✅ Resumed Giving: {resumed_giving}</li>
-                <li>✅ Added Bequests: {added_bequest}</li>
-        """
-
-    html += """
+                <li><strong>{positive_count} Positive emails</strong> ({positive_pct:.1f}%) - Alumni expressing gratitude, satisfaction, or positive experiences</li>
+                <li><strong>{negative_count} Negative emails</strong> ({negative_pct:.1f}%) - Alumni raising concerns, complaints, or dissatisfaction</li>
+                <li><strong>{neutral_count} Neutral emails</strong> ({neutral_pct:.1f}%) - General inquiries and standard communication</li>
             </ul>
         </div>
 
-        <h2>Detailed Email Log</h2>
-        <table>
-            <tr>
-                <th>Date</th>
-                <th>From</th>
-                <th>Sentiment</th>
-                <th>Giving Status</th>
-                <th>Email Text</th>
-            </tr>
+        <h2>💭 Overall Sentiment</h2>
+        <div class="section">
+            <p class="interpretation">{sentiment_interpretation}</p>
     """
 
-    # Add email rows
-    for _, row in weekly_data.iterrows():
-        date_str = row['Date Received'].strftime('%Y-%m-%d') if pd.notna(row['Date Received']) else 'N/A'
-        first_name = row.get('First Name', '')
-        last_name = row.get('Last Name', '')
-        email_addr = row.get('Email Address', '')
-        sentiment = row.get('Positive or Negative?', 'Neutral')
-        giving_status = row.get('Paused Giving OR Changed bequest intent?', 'No')
-        email_text = row.get('Email Text/Synopsis of Conversation/Notes', '')
-
-        # Determine row class based on sentiment
-        row_class = sentiment.lower() if sentiment in ['Positive', 'Negative', 'Neutral'] else ''
-
-        # Truncate long email text for readability
-        if len(str(email_text)) > 500:
-            email_text = str(email_text)[:500] + "..."
-
-        # Highlight critical giving status
-        if giving_status in ['Paused giving', 'Removed bequest']:
-            giving_status = f'<span class="alert">{giving_status}</span>'
-
-        html += f"""
-            <tr class="{row_class}">
-                <td>{date_str}</td>
-                <td>{first_name} {last_name}<br><small>{email_addr}</small></td>
-                <td>{sentiment}</td>
-                <td>{giving_status}</td>
-                <td class="email-text">{email_text}</td>
-            </tr>
+    # Add critical alerts if any
+    if paused_giving > 0 or removed_bequest > 0:
+        html += """
+            <div class="alert">
+                <p><strong>⚠️ Critical Alerts:</strong></p>
+                <ul>
+        """
+        if paused_giving > 0:
+            html += f"<li><strong>{paused_giving} alumni</strong> indicated they have paused their giving</li>"
+        if removed_bequest > 0:
+            html += f"<li><strong>{removed_bequest} alumni</strong> indicated they have removed bequest intentions</li>"
+        html += """
+                </ul>
+                <p style="color: #721c24;">These cases require immediate follow-up from the relationship management team.</p>
+            </div>
         """
 
-    html += f"""
-        </table>
+    # Add positive developments if any
+    if resumed_giving > 0 or added_bequest > 0:
+        html += """
+            <div class="positive">
+                <p><strong>✅ Positive Developments:</strong></p>
+                <ul>
+        """
+        if resumed_giving > 0:
+            html += f"<li><strong>{resumed_giving} alumni</strong> have resumed their giving</li>"
+        if added_bequest > 0:
+            html += f"<li><strong>{added_bequest} alumni</strong> have added bequest intentions</li>"
+        html += """
+                </ul>
+            </div>
+        """
 
+    html += """
+        </div>
+    """
+
+    # Note about filtered emails (placeholder for future enhancement)
+    html += """
+        <h2>🤔 Uncertain Classifications</h2>
+        <div class="section">
+            <p>Some emails were filtered as administrative or unclear. These emails contained:</p>
+            <ul>
+                <li>Automated responses or out-of-office messages</li>
+                <li>Very short messages without clear sentiment (e.g., "Thanks!" or "Ok")</li>
+                <li>System notifications or forwarded administrative emails</li>
+            </ul>
+            <p>These filtered emails are marked as "Untracked" in Gmail and can be reviewed manually if needed.</p>
+        </div>
+    """
+
+    html += f"""
         <div class="link">
-            <p><strong>📋 <a href="{email_config.SPREADSHEET_URL}">View Full Report in Google Sheets</a></strong></p>
+            <p><strong>📋 <a href="{email_config.SPREADSHEET_URL}">View Full Details in Google Sheets</a></strong></p>
+            <p style="font-size: 14px; color: #555;">Access the complete email log with names, dates, and full text for detailed review.</p>
         </div>
 
         <hr>
