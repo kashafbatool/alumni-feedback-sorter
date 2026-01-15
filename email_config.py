@@ -6,7 +6,7 @@ Update these values as needed.
 """
 
 # Recipient email address for weekly summaries
-RECIPIENT_EMAIL = "kashaf742@gmail.com"
+RECIPIENT_EMAIL = "efratagetachew69@gmail.com"
 
 # Google Sheets URL where alumni feedback data is stored
 SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1GYc5XF3ScKZmqONY3eUmzrpYnQZuu6Z-qszOTnk2AVQ/edit?gid=0#gid=0"
@@ -20,7 +20,7 @@ SEND_MINUTE = 0  # At the top of the hour
 SEND_DAY = 0  # 0 = Monday (Python's weekday numbering)
 
 # Email subject template
-EMAIL_SUBJECT_TEMPLATE = "Weekly Alumni Feedback Summary - {date_range}"
+EMAIL_SUBJECT_TEMPLATE = "Weekly Alumni Inbox Summary — {date_range}"
 
 # Retry configuration
 MAX_RETRIES = 3

@@ -9,6 +9,13 @@ import pandas as pd
 from datetime import datetime, timedelta
 from sheets_uploader import get_sheets_service
 import email_config
+import matplotlib
+matplotlib.use('Agg')  # Use non-interactive backend
+import matplotlib.pyplot as plt
+import io
+import base64
+from collections import Counter
+import re
 
 def fetch_weekly_data(spreadsheet_url, start_date, end_date):
     """
@@ -86,9 +93,205 @@ def fetch_weekly_data(spreadsheet_url, start_date, end_date):
         print(f"  ✗ Error fetching data: {e}")
         return None
 
+def generate_pie_chart(positive_count, negative_count, neutral_count, paused_giving, removed_bequest):
+    """
+    Generate a pie chart as base64-encoded image
+
+    Args:
+        positive_count: Number of positive emails
+        negative_count: Number of negative emails
+        neutral_count: Number of neutral emails
+        paused_giving: Number of paused giving
+        removed_bequest: Number of removed bequests
+
+    Returns:
+        Base64-encoded PNG image string
+    """
+    # Prepare data for pie chart
+    labels = []
+    sizes = []
+    colors = []
+
+    if positive_count > 0:
+        labels.append(f'Positive ({positive_count})')
+        sizes.append(positive_count)
+        colors.append('#28a745')  # Green
+
+    if negative_count > 0:
+        labels.append(f'Negative ({negative_count})')
+        sizes.append(negative_count)
+        colors.append('#dc3545')  # Red
+
+    if neutral_count > 0:
+        labels.append(f'Neutral ({neutral_count})')
+        sizes.append(neutral_count)
+        colors.append('#6c757d')  # Gray
+
+    if paused_giving > 0:
+        labels.append(f'Paused Giving ({paused_giving})')
+        sizes.append(paused_giving)
+        colors.append('#fd7e14')  # Orange
+
+    if removed_bequest > 0:
+        labels.append(f'Removed Bequest ({removed_bequest})')
+        sizes.append(removed_bequest)
+        colors.append('#e83e8c')  # Pink
+
+    # Create pie chart
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.pie(sizes, labels=labels, colors=colors, autopct='%1.1f%%', startangle=90)
+    ax.axis('equal')  # Equal aspect ratio ensures that pie is drawn as a circle
+    plt.title('Email Distribution Overview', fontsize=14, fontweight='bold', pad=20)
+
+    # Save to bytes buffer
+    buffer = io.BytesIO()
+    plt.savefig(buffer, format='png', bbox_inches='tight', dpi=100)
+    buffer.seek(0)
+
+    # Encode to base64
+    image_base64 = base64.b64encode(buffer.read()).decode('utf-8')
+    plt.close(fig)
+
+    return image_base64
+
+def analyze_themes(weekly_data):
+    """
+    Analyze email text to identify common themes
+
+    Args:
+        weekly_data: pandas DataFrame with email data
+
+    Returns:
+        List of theme strings
+    """
+    if weekly_data is None or len(weekly_data) == 0:
+        return []
+
+    # Combine all email text
+    all_text = ' '.join(weekly_data['Email Text/Synopsis of Conversation/Notes'].astype(str).tolist())
+    all_text = all_text.lower()
+
+    # Define theme keywords
+    theme_keywords = {
+        'Donations & Giving': ['donat', 'giv', 'contribut', 'pledge', 'fund', 'support', 'financial'],
+        'Events & Reunions': ['event', 'reunion', 'homecoming', 'gathering', 'celebration', 'anniversary'],
+        'Campus Changes': ['campus', 'building', 'construction', 'facility', 'renovation', 'new'],
+        'Administration & Leadership': ['president', 'administration', 'leadership', 'board', 'decision', 'policy'],
+        'Student Experience': ['student', 'education', 'academ', 'program', 'curriculum', 'class'],
+        'Alumni Engagement': ['network', 'connect', 'alumni', 'community', 'relationship', 'engagement'],
+        'Recognition & Thanks': ['thank', 'appreciat', 'grateful', 'recognition', 'honor', 'acknowledge'],
+        'Concerns & Complaints': ['concern', 'disappoint', 'upset', 'frustrat', 'worry', 'issue', 'problem'],
+        'Career & Mentorship': ['career', 'job', 'mentor', 'professional', 'network', 'internship'],
+        'Legacy & Bequests': ['will', 'estate', 'bequest', 'legacy', 'planned', 'endow']
+    }
+
+    # Count theme mentions
+    theme_counts = {}
+    for theme, keywords in theme_keywords.items():
+        count = sum(all_text.count(keyword) for keyword in keywords)
+        if count > 0:
+            theme_counts[theme] = count
+
+    # Get top 3-5 themes
+    sorted_themes = sorted(theme_counts.items(), key=lambda x: x[1], reverse=True)
+    top_themes = [theme for theme, count in sorted_themes[:5]]
+
+    # Generate theme descriptions
+    theme_descriptions = []
+
+    for theme in top_themes:
+        if theme == 'Donations & Giving':
+            theme_descriptions.append("**Donations & Giving** - Alumni discussing their financial support and contributions to the college")
+        elif theme == 'Events & Reunions':
+            theme_descriptions.append("**Events & Reunions** - Feedback about alumni events, reunions, and campus gatherings")
+        elif theme == 'Campus Changes':
+            theme_descriptions.append("**Campus Changes** - Reactions to new buildings, facilities, or campus developments")
+        elif theme == 'Administration & Leadership':
+            theme_descriptions.append("**Administration & Leadership** - Opinions about college leadership and institutional decisions")
+        elif theme == 'Student Experience':
+            theme_descriptions.append("**Student Experience** - Comments about academic programs and current student life")
+        elif theme == 'Alumni Engagement':
+            theme_descriptions.append("**Alumni Engagement** - Discussions about staying connected with the alumni community")
+        elif theme == 'Recognition & Thanks':
+            theme_descriptions.append("**Recognition & Thanks** - Alumni expressing gratitude and appreciation")
+        elif theme == 'Concerns & Complaints':
+            theme_descriptions.append("**Concerns & Complaints** - Alumni raising issues or expressing dissatisfaction")
+        elif theme == 'Career & Mentorship':
+            theme_descriptions.append("**Career & Mentorship** - Professional networking and career guidance discussions")
+        elif theme == 'Legacy & Bequests':
+            theme_descriptions.append("**Legacy & Bequests** - Conversations about planned giving and estate planning")
+
+    return theme_descriptions if theme_descriptions else ["**General Alumni Communication** - Standard updates and routine correspondence"]
+
+def generate_briefing(weekly_data, positive_count, negative_count, neutral_count,
+                      paused_giving, removed_bequest, total_emails, themes):
+    """
+    Generate an overall briefing paragraph summarizing the week
+
+    Args:
+        weekly_data: pandas DataFrame with email data
+        positive_count: Number of positive emails
+        negative_count: Number of negative emails
+        neutral_count: Number of neutral emails
+        paused_giving: Number of paused giving
+        removed_bequest: Number of removed bequests
+        total_emails: Total number of emails
+        themes: List of theme descriptions
+
+    Returns:
+        String with briefing paragraph
+    """
+    # Calculate percentages
+    positive_pct = (positive_count / total_emails * 100) if total_emails > 0 else 0
+    negative_pct = (negative_count / total_emails * 100) if total_emails > 0 else 0
+
+    # Determine overall sentiment tone
+    if positive_pct > 60:
+        sentiment_tone = "predominantly positive"
+        outlook = "The strong positive sentiment reflects healthy alumni relations and active engagement."
+    elif positive_pct > 40:
+        sentiment_tone = "generally balanced with a positive lean"
+        outlook = "Overall engagement remains healthy with manageable concerns."
+    elif negative_pct > 50:
+        sentiment_tone = "notably negative"
+        outlook = "The elevated negative sentiment warrants immediate attention from leadership."
+    elif negative_pct > 30:
+        sentiment_tone = "mixed with significant concerns"
+        outlook = "While not critical, the level of negative feedback suggests areas needing attention."
+    else:
+        sentiment_tone = "primarily neutral"
+        outlook = "Standard communication patterns with routine inquiries and updates."
+
+    # Build briefing
+    briefing = f"This week's alumni inbox reflects {sentiment_tone} engagement, with {total_emails} messages received. "
+
+    # Add critical concerns if present
+    if paused_giving > 0 or removed_bequest > 0:
+        concerns = []
+        if paused_giving > 0:
+            concerns.append(f"{paused_giving} paused giving notification{'s' if paused_giving > 1 else ''}")
+        if removed_bequest > 0:
+            concerns.append(f"{removed_bequest} removed bequest{'s' if removed_bequest > 1 else ''}")
+
+        briefing += f"Critically, there {'are' if len(concerns) > 1 or (paused_giving + removed_bequest) > 1 else 'is'} {' and '.join(concerns)}, requiring urgent follow-up. "
+
+    # Extract first theme if available
+    if themes:
+        # Get just the theme name from the first theme (before the dash)
+        first_theme = themes[0].split('**')[1] if '**' in themes[0] else themes[0]
+        briefing += f"The primary conversation themes center around {first_theme.lower()}"
+        if len(themes) > 1:
+            briefing += f", along with discussions about {themes[1].split('**')[1].lower() if '**' in themes[1] else themes[1].lower()}"
+        briefing += ". "
+
+    # Add outlook
+    briefing += outlook
+
+    return briefing
+
 def generate_html_report(weekly_data, start_date, end_date):
     """
-    Generate HTML email report from weekly data
+    Generate HTML email report from weekly data with pie chart and themes
 
     Args:
         weekly_data: pandas DataFrame with weekly email data
@@ -118,75 +321,77 @@ def generate_html_report(weekly_data, start_date, end_date):
     # Format date range
     date_range = f"{start_date.strftime('%B %d')} - {end_date.strftime('%B %d, %Y')}"
 
-    # Analyze trends
-    positive_pct = (positive_count / total_emails * 100) if total_emails > 0 else 0
-    negative_pct = (negative_count / total_emails * 100) if total_emails > 0 else 0
-    neutral_pct = (neutral_count / total_emails * 100) if total_emails > 0 else 0
+    # Generate pie chart
+    pie_chart_base64 = generate_pie_chart(positive_count, negative_count, neutral_count, paused_giving, removed_bequest)
 
-    # Determine overall sentiment interpretation
-    if positive_pct > 60:
-        sentiment_interpretation = "This week shows a strongly positive trend with alumni expressing appreciation and satisfaction."
-    elif positive_pct > 40:
-        sentiment_interpretation = "This week shows a balanced mix of feedback with a slight positive lean."
-    elif negative_pct > 50:
-        sentiment_interpretation = "This week shows concerning feedback trends that may require attention."
-    elif negative_pct > 30:
-        sentiment_interpretation = "This week shows mixed feedback with notable concerns that should be addressed."
-    else:
-        sentiment_interpretation = "This week shows mostly neutral engagement with standard alumni communication."
+    # Analyze themes
+    themes = analyze_themes(weekly_data)
+
+    # Generate overall briefing
+    briefing = generate_briefing(weekly_data, positive_count, negative_count, neutral_count,
+                                  paused_giving, removed_bequest, total_emails, themes)
 
     # Build HTML
     html = f"""
     <html>
     <head>
         <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }}
             h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
             h2 {{ color: #34495e; margin-top: 30px; border-bottom: 2px solid #bdc3c7; padding-bottom: 5px; }}
-            .section {{ background-color: #ecf0f1; padding: 20px; border-radius: 5px; margin: 20px 0; }}
-            .trend {{ background-color: #e8f4f8; padding: 15px; border-left: 4px solid #3498db; margin: 15px 0; }}
-            .alert {{ background-color: #f8d7da; padding: 15px; border-left: 4px solid #e74c3c; margin: 15px 0; }}
-            .positive {{ background-color: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; }}
-            .metric {{ font-size: 18px; font-weight: bold; color: #2c3e50; }}
-            .interpretation {{ font-style: italic; color: #555; margin-top: 10px; }}
-            .link {{ margin-top: 30px; padding: 15px; background-color: #e8f4f8; border-radius: 5px; }}
+            .section {{ background-color: #ecf0f1; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+            .overview {{ background-color: #e8f4f8; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+            .chart-container {{ text-align: center; margin: 20px 0; }}
+            .metric {{ font-size: 24px; font-weight: bold; color: #2c3e50; }}
+            .alert {{ background-color: #f8d7da; padding: 15px; border-left: 4px solid #e74c3c; margin: 15px 0; border-radius: 5px; }}
+            .positive {{ background-color: #d4edda; padding: 15px; border-left: 4px solid #28a745; margin: 15px 0; border-radius: 5px; }}
+            .theme-item {{ padding: 10px 0; border-bottom: 1px solid #ddd; }}
+            .theme-item:last-child {{ border-bottom: none; }}
+            .link {{ margin-top: 30px; padding: 15px; background-color: #e8f4f8; border-radius: 8px; text-align: center; }}
             ul {{ line-height: 1.8; }}
         </style>
     </head>
     <body>
-        <h1>📊 Weekly Alumni Feedback Summary</h1>
-        <p><strong>Period:</strong> {date_range}</p>
+        <h1>📊 Weekly Alumni Inbox Summary</h1>
+        <p><strong>Reporting Period:</strong> {date_range}</p>
 
-        <h2>📈 Weekly Trends</h2>
-        <div class="trend">
+        <h2>📈 Overview</h2>
+        <div class="overview">
             <p class="metric">Total Emails: {total_emails}</p>
-            <p>This week, the system processed {total_emails} alumni feedback emails. The breakdown shows:</p>
+            <p style="margin-top: 15px;">Summary of this week's alumni inbox:</p>
             <ul>
-                <li><strong>{positive_count} Positive emails</strong> ({positive_pct:.1f}%) - Alumni expressing gratitude, satisfaction, or positive experiences</li>
-                <li><strong>{negative_count} Negative emails</strong> ({negative_pct:.1f}%) - Alumni raising concerns, complaints, or dissatisfaction</li>
-                <li><strong>{neutral_count} Neutral emails</strong> ({neutral_pct:.1f}%) - General inquiries and standard communication</li>
+                <li><strong>Positive:</strong> {positive_count} emails ({(positive_count/total_emails*100):.1f}%)</li>
+                <li><strong>Negative:</strong> {negative_count} emails ({(negative_count/total_emails*100):.1f}%)</li>
+                <li><strong>Neutral:</strong> {neutral_count} emails ({(neutral_count/total_emails*100):.1f}%)</li>
+                <li><strong>Paused Giving:</strong> {paused_giving}</li>
+                <li><strong>Removed Bequests:</strong> {removed_bequest}</li>
             </ul>
         </div>
 
-        <h2>💭 Overall Sentiment</h2>
-        <div class="section">
-            <p class="interpretation">{sentiment_interpretation}</p>
+        <div class="chart-container">
+            <img src="data:image/png;base64,{pie_chart_base64}" alt="Email Distribution Pie Chart" style="max-width: 100%; height: auto;" />
+        </div>
+
+        <h2>📝 Overall Briefing</h2>
+        <div class="section" style="background-color: #fff3cd; border-left: 4px solid #ffc107;">
+            <p style="font-size: 16px; line-height: 1.8;">{briefing}</p>
+        </div>
     """
 
     # Add critical alerts if any
     if paused_giving > 0 or removed_bequest > 0:
         html += """
             <div class="alert">
-                <p><strong>⚠️ Critical Alerts:</strong></p>
+                <p><strong>⚠ Critical Alerts:</strong></p>
                 <ul>
         """
         if paused_giving > 0:
-            html += f"<li><strong>{paused_giving} alumni</strong> indicated they have paused their giving</li>"
+            html += f"<li><strong>{paused_giving} alumni</strong> paused their giving</li>"
         if removed_bequest > 0:
-            html += f"<li><strong>{removed_bequest} alumni</strong> indicated they have removed bequest intentions</li>"
+            html += f"<li><strong>{removed_bequest} alumni</strong> removed bequest intentions</li>"
         html += """
                 </ul>
-                <p style="color: #721c24;">These cases require immediate follow-up from the relationship management team.</p>
+                <p style="color: #721c24; margin-top: 10px;">These require immediate follow-up.</p>
             </div>
         """
 
@@ -194,45 +399,42 @@ def generate_html_report(weekly_data, start_date, end_date):
     if resumed_giving > 0 or added_bequest > 0:
         html += """
             <div class="positive">
-                <p><strong>✅ Positive Developments:</strong></p>
+                <p><strong>✓ Positive Developments:</strong></p>
                 <ul>
         """
         if resumed_giving > 0:
-            html += f"<li><strong>{resumed_giving} alumni</strong> have resumed their giving</li>"
+            html += f"<li><strong>{resumed_giving} alumni</strong> resumed giving</li>"
         if added_bequest > 0:
-            html += f"<li><strong>{added_bequest} alumni</strong> have added bequest intentions</li>"
+            html += f"<li><strong>{added_bequest} alumni</strong> added bequest intentions</li>"
         html += """
                 </ul>
             </div>
         """
 
+    # Themes observed section
     html += """
-        </div>
-    """
-
-    # Note about filtered emails (placeholder for future enhancement)
-    html += """
-        <h2>🤔 Uncertain Classifications</h2>
+        <h2>💡 Themes Observed</h2>
         <div class="section">
-            <p>Some emails were filtered as administrative or unclear. These emails contained:</p>
-            <ul>
-                <li>Automated responses or out-of-office messages</li>
-                <li>Very short messages without clear sentiment (e.g., "Thanks!" or "Ok")</li>
-                <li>System notifications or forwarded administrative emails</li>
-            </ul>
-            <p>These filtered emails are marked as "Untracked" in Gmail and can be reviewed manually if needed.</p>
+            <p>Based on analysis of this week's correspondence, the following themes emerged:</p>
+    """
+
+    for theme in themes:
+        html += f'<div class="theme-item">{theme}</div>'
+
+    html += """
         </div>
     """
 
+    # Link to full data
     html += f"""
         <div class="link">
             <p><strong>📋 <a href="{email_config.SPREADSHEET_URL}">View Full Details in Google Sheets</a></strong></p>
-            <p style="font-size: 14px; color: #555;">Access the complete email log with names, dates, and full text for detailed review.</p>
+            <p style="font-size: 14px; color: #555;">Access complete email log with names, dates, and full text</p>
         </div>
 
-        <hr>
-        <p style="color: #7f8c8d; font-size: 12px;">
-            This is an automated weekly summary from the Alumni Feedback System.<br>
+        <hr style="margin-top: 40px; border: none; border-top: 1px solid #ccc;">
+        <p style="color: #7f8c8d; font-size: 12px; text-align: center;">
+            Automated weekly summary from Alumni Feedback System<br>
             Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
         </p>
     </body>

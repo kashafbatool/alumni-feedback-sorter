@@ -105,7 +105,17 @@ def send_weekly_summary(service, recipient_email, spreadsheet_url, start_date, e
 
     # Step 3: Create email message
     print("\nStep 3: Creating email message...")
-    date_range = f"{start_date.strftime('%b %d')} - {end_date.strftime('%b %d, %Y')}"
+    # Format: "Jan 8–14, 2026" (no leading zeros)
+    start_day = str(start_date.day)
+    end_day = str(end_date.day)
+    start_month = start_date.strftime('%b')
+    end_month = end_date.strftime('%b')
+
+    if start_month == end_month:
+        date_range = f"{start_month} {start_day}–{end_day}, {end_date.year}"
+    else:
+        date_range = f"{start_month} {start_day}–{end_month} {end_day}, {end_date.year}"
+
     subject = email_config.EMAIL_SUBJECT_TEMPLATE.format(date_range=date_range)
 
     # Get sender email from service
