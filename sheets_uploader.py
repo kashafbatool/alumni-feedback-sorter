@@ -30,10 +30,34 @@ CREDENTIALS_FILE = "credentials/service-account.json"
 
 # Check if called from Gmail processor
 import os
-if os.environ.get('GMAIL_UPLOAD'):
+if os.environ.get('TEMP_FILE'):
+    EXCEL_FILE = os.environ.get('TEMP_FILE')  # Use temp file for specific month
+elif os.environ.get('GMAIL_UPLOAD'):
     EXCEL_FILE = "Alumni_Feedback_Report_Gmail.xlsx"  # From gmail_to_sheets.py
 else:
     EXCEL_FILE = "Alumni_Feedback_Report_Filtered.xlsx"  # From data_processor_with_filter.py
+
+def get_sheets_service():
+    """
+    Get authenticated Google Sheets client
+
+    Returns:
+        gspread.Client object or None if authentication fails
+    """
+    try:
+        scopes = [
+            'https://www.googleapis.com/auth/spreadsheets',
+            'https://www.googleapis.com/auth/drive'
+        ]
+        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=scopes)
+        client = gspread.authorize(creds)
+        return client
+    except FileNotFoundError:
+        print(f"✗ Error: {CREDENTIALS_FILE} not found.")
+        return None
+    except Exception as e:
+        print(f"✗ Authentication error: {e}")
+        return None
 
 def upload_to_sheets(spreadsheet_url, worksheet_name="Sheet1"):
     """
@@ -60,42 +84,26 @@ def upload_to_sheets(spreadsheet_url, worksheet_name="Sheet1"):
 
     # 2. Authenticate with Google Sheets
     print(f"\n2. Authenticating with Google Sheets...")
-    try:
-        scopes = [
-            'https://www.googleapis.com/auth/spreadsheets',
-            'https://www.googleapis.com/auth/drive'
-        ]
-        creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=scopes)
-        client = gspread.authorize(creds)
-        print("   ✓ Authentication successful")
-    except FileNotFoundError:
-        print(f"   ✗ Error: {CREDENTIALS_FILE} not found.")
+    client = get_sheets_service()
+    if not client:
         print("   Follow the setup instructions in the script comments.")
         return
-    except Exception as e:
-        print(f"   ✗ Authentication error: {e}")
-        return
+    print("   ✓ Authentication successful")
 
     # 3. Open the spreadsheet
     print(f"\n3. Opening spreadsheet...")
     try:
         sheet = client.open_by_url(spreadsheet_url)
-
-        # Try to open existing worksheet, or create new one
         try:
             worksheet = sheet.worksheet(worksheet_name)
-            print(f"   ✓ Opened existing worksheet '{worksheet_name}'")
+            print(f"   ✓ Opened '{sheet.title}' - '{worksheet_name}'")
         except gspread.exceptions.WorksheetNotFound:
-            # Create new worksheet
-            worksheet = sheet.add_worksheet(title=worksheet_name, rows=1000, cols=20)
-            print(f"   ✓ Created new worksheet '{worksheet_name}'")
+            print(f"   ⚠ Worksheet '{worksheet_name}' not found. Creating it...")
+            worksheet = sheet.add_worksheet(title=worksheet_name, rows=1000, cols=14)
+            print(f"   ✓ Created worksheet '{worksheet_name}'")
     except gspread.exceptions.SpreadsheetNotFound:
         print("   ✗ Error: Spreadsheet not found.")
         print("   Make sure you've shared the sheet with the service account email.")
-        return
-    except gspread.exceptions.WorksheetNotFound:
-        print(f"   ✗ Error: Worksheet '{worksheet_name}' not found.")
-        print(f"   Available worksheets: {[ws.title for ws in sheet.worksheets()]}")
         return
     except Exception as e:
         print(f"   ✗ Error opening spreadsheet: {e}")
