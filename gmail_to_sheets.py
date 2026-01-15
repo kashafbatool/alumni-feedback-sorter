@@ -230,15 +230,16 @@ def apply_filtered_label(service, message_ids):
             print(f"   ⚠ Warning: 'Untracked' label not found in Gmail")
             return
 
-        # Apply the label to all filtered messages
+        # Apply the label to all filtered messages AND remove from inbox
         service.users().messages().batchModify(
             userId='me',
             body={
                 'ids': message_ids,
-                'addLabelIds': [label_id]
+                'addLabelIds': [label_id],
+                'removeLabelIds': ['INBOX']  # Move emails out of inbox
             }
         ).execute()
-        print(f"   ✓ Applied 'Untracked' label to {len(message_ids)} emails")
+        print(f"   ✓ Applied 'Untracked' label and moved {len(message_ids)} emails out of inbox")
     except Exception as e:
         print(f"   ⚠ Warning: Could not apply label: {e}")
 
