@@ -26,6 +26,7 @@ from google.auth.transport.requests import Request
 # Import your existing modules
 from email_brain import analyze_email
 from only_filter import should_filter
+from topic_detector import detect_major_topics, generate_sheet_name
 
 def get_gmail_service():
     """Authenticate and return Gmail service"""
@@ -218,8 +219,24 @@ def process_and_upload(spreadsheet_url):
     message_ids = df['id'].tolist()
     df = df.drop('id', axis=1)  # Remove id column
 
-    print(f"\n2. Pre-filtering emails...")
+    # STEP 1: Detect major topics BEFORE filtering
+    print(f"\n2. Detecting major topics in {len(df)} emails...")
+
+    # Convert to list of dicts for topic detector
+    all_emails_list = df.to_dict('records')
+    topic_result = detect_major_topics(all_emails_list, min_cluster_size=5)
+
+    if topic_result['topics']:
+        print(f"   ✓ Found {len(topic_result['topics'])} major topic(s):")
+        for topic in topic_result['topics']:
+            print(f"      - {topic['entity']}: {topic['size']} emails")
+    else:
+        print(f"   ✓ No major topics detected (threshold: 5 emails)")
+
+    # STEP 2: Now filter emails (but keep topic assignments)
+    print(f"\n3. Pre-filtering emails...")
     df['Should_Filter'] = df['Body'].apply(lambda x: should_filter(x, subject=""))
+    df['Topic_Assignment'] = topic_result['topic_assignments']
 
     filtered_out = df[df['Should_Filter'] == True]
     emails_to_process = df[df['Should_Filter'] == False]
@@ -227,14 +244,39 @@ def process_and_upload(spreadsheet_url):
     print(f"   - Filtered out (admin/irrelevant): {len(filtered_out)}")
     print(f"   - Kept for analysis (real feedback): {len(emails_to_process)}")
 
+    # Special handling: If an email is part of a major topic, keep it even if filtered
+    topic_override_count = 0
+    if topic_result['topics']:
+        for idx in filtered_out.index:
+            topic_idx = df.loc[idx, 'Topic_Assignment']
+            if topic_idx >= 0:  # Part of a major topic
+                # Move from filtered to process
+                emails_to_process = pd.concat([emails_to_process, df.loc[[idx]]])
+                filtered_out = filtered_out.drop(idx)
+                topic_override_count += 1
+
+        if topic_override_count > 0:
+            print(f"   + Kept {topic_override_count} additional emails (part of major topics)")
+            print(f"   - Final kept for analysis: {len(emails_to_process)}")
+
     if len(emails_to_process) == 0:
         print("\n✓ All emails were administrative/irrelevant")
         print("   Marking them as read...")
         mark_as_read(service, message_ids)
         return
 
+    # Update topic result to only include emails we're processing
+    # Map old indices to new indices
+    old_to_new_idx = {old_idx: new_idx for new_idx, old_idx in enumerate(emails_to_process.index)}
+    new_topic_assignments = []
+    for old_idx in emails_to_process.index:
+        new_topic_assignments.append(emails_to_process.loc[old_idx, 'Topic_Assignment'])
+
+    topic_result['topic_assignments'] = new_topic_assignments
+    emails_to_process = emails_to_process.drop(['Should_Filter', 'Topic_Assignment'], axis=1)
+
     # Analyze sentiment
-    print(f"\n3. Analyzing {len(emails_to_process)} emails for sentiment and intent...")
+    print(f"\n4. Analyzing {len(emails_to_process)} emails for sentiment and intent...")
 
     # Analyze each email and ensure we get proper results
     analyzed_results = []
@@ -309,31 +351,90 @@ def process_and_upload(spreadsheet_url):
     formatted_df.to_excel("Alumni_Feedback_Report_Gmail.xlsx", index=False)
     print(f"   ✓ Analysis complete")
 
+    # Split data by topic for upload
+    print(f"\n5. Preparing data for upload...")
+
+    # Separate emails by topic
+    topic_assignments = topic_result['topic_assignments']
+    main_sheet_data = []
+    topic_sheets_data = {}  # topic_index -> DataFrame
+
+    for idx, (orig_idx, row) in enumerate(formatted_df.iterrows()):
+        topic_idx = topic_assignments[idx]
+        if topic_idx >= 0:
+            # This email belongs to a topic-specific sheet
+            if topic_idx not in topic_sheets_data:
+                topic_sheets_data[topic_idx] = []
+            topic_sheets_data[topic_idx].append(row)
+        else:
+            # This email goes to main sheet
+            main_sheet_data.append(row)
+
+    # Create DataFrames
+    main_df = pd.DataFrame(main_sheet_data) if main_sheet_data else pd.DataFrame(columns=formatted_df.columns)
+    topic_dfs = {idx: pd.DataFrame(data) for idx, data in topic_sheets_data.items()}
+
+    print(f"   - Main sheet: {len(main_df)} emails")
+    for topic_idx, df in topic_dfs.items():
+        topic_name = topic_result['topics'][topic_idx]['entity']
+        print(f"   - {topic_name} sheet: {len(df)} emails")
+
     # Upload to Google Sheets
-    print(f"\n4. Uploading to Google Sheets...")
-    import subprocess
-    result = subprocess.run(
-        ['python3', 'sheets_uploader.py', spreadsheet_url, 'jan 2026'],
-        capture_output=True,
-        text=True,
-        env={**os.environ, 'GMAIL_UPLOAD': 'true'}
-    )
+    print(f"\n6. Uploading to Google Sheets...")
 
-    if result.returncode == 0:
-        print("   ✓ Upload successful!")
+    # Get current month/year for sheet naming
+    from datetime import datetime
+    date_str = datetime.now().strftime("%b %Y")
 
-        # Mark emails as read
-        print(f"\n5. Marking processed emails as read...")
-        mark_as_read(service, message_ids)
+    # Upload main sheet
+    if len(main_df) > 0:
+        main_df.to_excel("Alumni_Feedback_Report_Gmail.xlsx", index=False)
+        import subprocess
+        result = subprocess.run(
+            ['python3', 'sheets_uploader.py', spreadsheet_url, f'Alumni Feedback - {date_str}'],
+            capture_output=True,
+            text=True,
+            env={**os.environ, 'GMAIL_UPLOAD': 'true'}
+        )
+        if result.returncode == 0:
+            print(f"   ✓ Main sheet uploaded ({len(main_df)} emails)")
+        else:
+            print(f"   ✗ Main sheet upload failed: {result.stderr}")
 
-        print("\n" + "="*80)
-        print("✓ SUCCESS! All emails processed and uploaded to Google Sheets")
-        print("="*80)
-        print(f"\nProcessed: {len(emails_to_process)} emails")
-        print(f"Filtered: {len(filtered_out)} emails")
-        print(f"\nView sheet: {spreadsheet_url}")
-    else:
-        print(f"   ✗ Upload failed: {result.stderr}")
+    # Upload topic-specific sheets
+    for topic_idx, topic_df in topic_dfs.items():
+        topic = topic_result['topics'][topic_idx]
+        sheet_name = generate_sheet_name(topic, date_str)
+
+        # Save topic data to temp Excel
+        topic_df.to_excel("Alumni_Feedback_Report_Gmail.xlsx", index=False)
+
+        result = subprocess.run(
+            ['python3', 'sheets_uploader.py', spreadsheet_url, sheet_name],
+            capture_output=True,
+            text=True,
+            env={**os.environ, 'GMAIL_UPLOAD': 'true'}
+        )
+
+        if result.returncode == 0:
+            print(f"   ✓ Topic sheet '{sheet_name}' uploaded ({len(topic_df)} emails)")
+        else:
+            print(f"   ⚠ Topic sheet '{sheet_name}' upload warning: {result.stderr}")
+
+    # Mark emails as read
+    print(f"\n7. Marking processed emails as read...")
+    mark_as_read(service, message_ids)
+
+    print("\n" + "="*80)
+    print("✓ SUCCESS! All emails processed and uploaded to Google Sheets")
+    print("="*80)
+    print(f"\nProcessed: {len(emails_to_process)} emails")
+    print(f"  - Main sheet: {len(main_df)} emails")
+    for topic_idx, topic_df in topic_dfs.items():
+        topic_name = topic_result['topics'][topic_idx]['entity']
+        print(f"  - {topic_name}: {len(topic_df)} emails")
+    print(f"Filtered: {len(filtered_out)} emails")
+    print(f"\nView sheet: {spreadsheet_url}")
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:

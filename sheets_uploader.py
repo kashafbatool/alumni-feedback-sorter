@@ -80,8 +80,15 @@ def upload_to_sheets(spreadsheet_url, worksheet_name="Sheet1"):
     print(f"\n3. Opening spreadsheet...")
     try:
         sheet = client.open_by_url(spreadsheet_url)
-        worksheet = sheet.worksheet(worksheet_name)
-        print(f"   ✓ Opened '{sheet.title}' - '{worksheet_name}'")
+
+        # Try to open existing worksheet, or create new one
+        try:
+            worksheet = sheet.worksheet(worksheet_name)
+            print(f"   ✓ Opened existing worksheet '{worksheet_name}'")
+        except gspread.exceptions.WorksheetNotFound:
+            # Create new worksheet
+            worksheet = sheet.add_worksheet(title=worksheet_name, rows=1000, cols=20)
+            print(f"   ✓ Created new worksheet '{worksheet_name}'")
     except gspread.exceptions.SpreadsheetNotFound:
         print("   ✗ Error: Spreadsheet not found.")
         print("   Make sure you've shared the sheet with the service account email.")
