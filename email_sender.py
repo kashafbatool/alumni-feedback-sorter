@@ -105,8 +105,9 @@ def send_weekly_summary(service, recipient_email, spreadsheet_url, start_date, e
 
     # Step 3: Create email message
     print("\nStep 3: Creating email message...")
-    date_range = f"{start_date.strftime('%b %d')} - {end_date.strftime('%b %d, %Y')}"
-    subject = email_config.EMAIL_SUBJECT_TEMPLATE.format(date_range=date_range)
+    # Format: "Weekly Alumni Inbox Summary - Jan 8-14, 2026"
+    date_range = f"{start_date.strftime('%b %-d')}-{end_date.strftime('%-d, %Y')}"
+    subject = f"Weekly Alumni Inbox Summary - {date_range}"
 
     # Get sender email from service
     try:

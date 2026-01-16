@@ -86,6 +86,107 @@ def fetch_weekly_data(spreadsheet_url, start_date, end_date):
         print(f"  ✗ Error fetching data: {e}")
         return None
 
+def extract_themes(weekly_data):
+    """
+    Extract common themes from email bodies with counts
+
+    Args:
+        weekly_data: pandas DataFrame with weekly email data
+
+    Returns:
+        Dictionary with 'major_themes' (list of tuples with theme and count),
+        'minor_themes' (list of tuples), and 'total_emails' (int)
+    """
+    from collections import Counter
+    import re
+
+    # Common keywords for different themes
+    theme_keywords = {
+        'Giving & Donations': ['donation', 'donate', 'giving', 'gift', 'contribute', 'support', 'pledge', 'bequest', 'endowment'],
+        'Events & Reunions': ['event', 'reunion', 'gathering', 'homecoming', 'attend', 'rsvp', 'invitation'],
+        'Career & Networking': ['career', 'job', 'networking', 'mentor', 'internship', 'employment', 'hiring'],
+        'Alumni Updates': ['update', 'address', 'contact', 'information', 'moved', 'married', 'changed'],
+        'Gratitude & Appreciation': ['thank', 'grateful', 'appreciate', 'wonderful', 'amazing', 'love'],
+        'Concerns & Complaints': ['concern', 'disappointed', 'issue', 'problem', 'complaint', 'unhappy', 'frustrated'],
+        'Campus Life': ['campus', 'facilities', 'building', 'dining', 'housing', 'library'],
+        'Academic Programs': ['program', 'course', 'degree', 'major', 'curriculum', 'faculty', 'professor']
+    }
+
+    theme_counts = Counter()
+    total_emails = len(weekly_data)
+
+    # Analyze each email body
+    for body in weekly_data['Email Text/Synopsis of Conversation/Notes']:
+        if pd.notna(body):
+            body_lower = str(body).lower()
+            for theme, keywords in theme_keywords.items():
+                if any(keyword in body_lower for keyword in keywords):
+                    theme_counts[theme] += 1
+
+    # Separate into major (top 3) and minor themes
+    all_themes = theme_counts.most_common()
+
+    if not all_themes:
+        return {
+            'major_themes': [('General Alumni Correspondence', total_emails)],
+            'minor_themes': [],
+            'total_emails': total_emails
+        }
+
+    # Major themes: top 3 or themes with >20% of emails
+    major_threshold = max(3, int(total_emails * 0.2))
+    major_themes = []
+    minor_themes = []
+
+    for theme, count in all_themes[:3]:
+        major_themes.append((theme, count))
+
+    # Minor themes: everything else that has at least 1 mention
+    for theme, count in all_themes[3:]:
+        if count > 0:
+            minor_themes.append((theme, count))
+
+    return {
+        'major_themes': major_themes,
+        'minor_themes': minor_themes,
+        'total_emails': total_emails
+    }
+
+def generate_summary_paragraph(weekly_data, positive_count, negative_count, neutral_count, paused_giving, removed_bequest):
+    """
+    Generate a brief summary paragraph about the week's emails
+
+    Args:
+        weekly_data: pandas DataFrame with weekly email data
+        positive_count, negative_count, neutral_count: Sentiment counts
+        paused_giving, removed_bequest: Giving status counts
+
+    Returns:
+        Summary paragraph string
+    """
+    total = len(weekly_data)
+
+    # Determine overall sentiment
+    if positive_count > negative_count:
+        sentiment_desc = "predominantly positive"
+    elif negative_count > positive_count:
+        sentiment_desc = "mixed, with some concerns raised"
+    else:
+        sentiment_desc = "balanced"
+
+    # Build summary
+    summary = f"This week, we received {total} alumni emails with {sentiment_desc} sentiment. "
+
+    if paused_giving > 0 or removed_bequest > 0:
+        summary += f"<strong>Important:</strong> {paused_giving + removed_bequest} alumni indicated changes to their giving status, requiring follow-up. "
+
+    if positive_count > total * 0.6:
+        summary += "The majority of correspondence expressed appreciation and support for the institution. "
+    elif negative_count > total * 0.3:
+        summary += "Several alumni raised concerns that may need attention from the appropriate teams. "
+
+    return summary
+
 def generate_html_report(weekly_data, start_date, end_date):
     """
     Generate HTML email report from weekly data
@@ -115,115 +216,138 @@ def generate_html_report(weekly_data, start_date, end_date):
     resumed_giving = giving_status_counts.get('Resumed giving', 0)
     added_bequest = giving_status_counts.get('Added bequest', 0)
 
-    # Format date range
-    date_range = f"{start_date.strftime('%B %d')} - {end_date.strftime('%B %d, %Y')}"
+    # Extract themes
+    themes = extract_themes(weekly_data)
 
-    # Build HTML
+    # Generate summary paragraph
+    summary_para = generate_summary_paragraph(weekly_data, positive_count, negative_count, neutral_count, paused_giving, removed_bequest)
+
+    # Calculate percentages for pie chart
+    positive_pct = (positive_count / total_emails * 100) if total_emails > 0 else 0
+    negative_pct = (negative_count / total_emails * 100) if total_emails > 0 else 0
+    neutral_pct = (neutral_count / total_emails * 100) if total_emails > 0 else 0
+
+    # Build HTML with pie chart using CSS
     html = f"""
     <html>
     <head>
         <style>
-            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 0 auto; padding: 20px; }}
             h1 {{ color: #2c3e50; border-bottom: 3px solid #3498db; padding-bottom: 10px; }}
-            h2 {{ color: #34495e; margin-top: 30px; }}
-            .stats {{ background-color: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }}
-            .stats ul {{ list-style-type: none; padding: 0; }}
-            .stats li {{ margin: 8px 0; font-size: 16px; }}
-            .alert {{ color: #e74c3c; font-weight: bold; }}
-            table {{ border-collapse: collapse; width: 100%; margin-top: 20px; }}
-            th {{ background-color: #3498db; color: white; padding: 12px; text-align: left; }}
-            td {{ padding: 10px; border-bottom: 1px solid #ddd; vertical-align: top; }}
-            tr:hover {{ background-color: #f5f5f5; }}
-            .positive {{ background-color: #d4edda; }}
-            .negative {{ background-color: #f8d7da; }}
-            .neutral {{ background-color: #fff3cd; }}
-            .email-text {{ max-width: 400px; white-space: pre-wrap; font-size: 14px; }}
-            .link {{ margin-top: 30px; padding: 15px; background-color: #e8f4f8; border-radius: 5px; }}
+            h2 {{ color: #34495e; margin-top: 30px; margin-bottom: 15px; }}
+            .summary-box {{ background-color: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #3498db; }}
+            .stats-container {{ display: flex; justify-content: space-around; align-items: center; margin: 30px 0; flex-wrap: wrap; }}
+            .pie-chart {{ width: 200px; height: 200px; border-radius: 50%; margin: 20px; }}
+            .stats-list {{ list-style: none; padding: 0; margin: 20px; }}
+            .stats-list li {{ margin: 12px 0; font-size: 16px; display: flex; align-items: center; }}
+            .color-box {{ width: 20px; height: 20px; display: inline-block; margin-right: 10px; border-radius: 3px; }}
+            .positive-color {{ background-color: #28a745; }}
+            .negative-color {{ background-color: #dc3545; }}
+            .neutral-color {{ background-color: #ffc107; }}
+            .themes-list {{ background-color: #e8f4f8; padding: 20px; border-radius: 8px; margin: 20px 0; }}
+            .themes-list ul {{ margin: 10px 0; padding-left: 20px; }}
+            .themes-list li {{ margin: 8px 0; }}
+            .alert-box {{ background-color: #fff3cd; border-left: 4px solid #ff9800; padding: 15px; margin: 20px 0; border-radius: 5px; }}
+            .link-box {{ margin-top: 30px; padding: 20px; background-color: #e8f4f8; border-radius: 8px; text-align: center; }}
+            .link-box a {{ color: #3498db; text-decoration: none; font-weight: bold; font-size: 18px; }}
+            .link-box a:hover {{ text-decoration: underline; }}
+            .footer {{ margin-top: 40px; padding-top: 20px; border-top: 1px solid #ddd; color: #7f8c8d; font-size: 12px; text-align: center; }}
         </style>
     </head>
     <body>
-        <h1>📊 Weekly Alumni Feedback Summary</h1>
-        <p><strong>Period:</strong> {date_range}</p>
+        <h1>📊 Weekly Alumni Inbox Summary</h1>
 
-        <div class="stats">
-            <h2>Summary Statistics</h2>
-            <ul>
-                <li><strong>Total Emails Processed:</strong> {total_emails}</li>
-                <li><strong>Positive:</strong> {positive_count} ({positive_count/total_emails*100:.1f}%)</li>
-                <li><strong>Negative:</strong> {negative_count} ({negative_count/total_emails*100:.1f}%)</li>
-                <li><strong>Neutral:</strong> {neutral_count} ({neutral_count/total_emails*100:.1f}%)</li>
+        <div class="summary-box">
+            <p><strong>Week of:</strong> {start_date.strftime('%B %d')} - {end_date.strftime('%B %d, %Y')}</p>
+            <p>{summary_para}</p>
+        </div>
+
+        <h2>📈 Email Breakdown</h2>
+        <div class="stats-container">
+            <svg width="200" height="200" viewBox="0 0 200 200" style="margin: 20px;">
+                <circle r="90" cx="100" cy="100" fill="#28a745" />
+                <circle r="90" cx="100" cy="100" fill="#dc3545"
+                        stroke-dasharray="{positive_pct * 5.65} {100 * 5.65}"
+                        stroke-dashoffset="{-25 * 5.65}"
+                        stroke-width="180"
+                        fill="none" />
+                <circle r="90" cx="100" cy="100" fill="#ffc107"
+                        stroke-dasharray="{negative_pct * 5.65} {100 * 5.65}"
+                        stroke-dashoffset="{-(25 + positive_pct) * 5.65}"
+                        stroke-width="180"
+                        fill="none" />
+                <circle r="60" cx="100" cy="100" fill="white" />
+                <text x="100" y="95" text-anchor="middle" font-size="24" font-weight="bold" fill="#333">{total_emails}</text>
+                <text x="100" y="115" text-anchor="middle" font-size="14" fill="#666">Total</text>
+            </svg>
+
+            <ul class="stats-list">
+                <li><span class="color-box positive-color"></span><strong>Positive:</strong> {positive_count} ({positive_pct:.1f}%)</li>
+                <li><span class="color-box negative-color"></span><strong>Negative:</strong> {negative_count} ({negative_pct:.1f}%)</li>
+                <li><span class="color-box neutral-color"></span><strong>Neutral:</strong> {neutral_count} ({neutral_pct:.1f}%)</li>
     """
 
     if paused_giving > 0 or removed_bequest > 0:
         html += f"""
-                <li class="alert">🚨 Paused Giving: {paused_giving}</li>
-                <li class="alert">🚨 Removed Bequests: {removed_bequest}</li>
-        """
-
-    if resumed_giving > 0 or added_bequest > 0:
-        html += f"""
-                <li>✅ Resumed Giving: {resumed_giving}</li>
-                <li>✅ Added Bequests: {added_bequest}</li>
+                <li style="margin-top: 20px;"><strong>⚠️ Paused Giving:</strong> {paused_giving}</li>
+                <li><strong>⚠️ Removed Bequests:</strong> {removed_bequest}</li>
         """
 
     html += """
             </ul>
         </div>
-
-        <h2>Detailed Email Log</h2>
-        <table>
-            <tr>
-                <th>Date</th>
-                <th>From</th>
-                <th>Sentiment</th>
-                <th>Giving Status</th>
-                <th>Email Text</th>
-            </tr>
     """
 
-    # Add email rows
-    for _, row in weekly_data.iterrows():
-        date_str = row['Date Received'].strftime('%Y-%m-%d') if pd.notna(row['Date Received']) else 'N/A'
-        first_name = row.get('First Name', '')
-        last_name = row.get('Last Name', '')
-        email_addr = row.get('Email Address', '')
-        sentiment = row.get('Positive or Negative?', 'Neutral')
-        giving_status = row.get('Paused Giving OR Changed bequest intent?', 'No')
-        email_text = row.get('Email Text/Synopsis of Conversation/Notes', '')
-
-        # Determine row class based on sentiment
-        row_class = sentiment.lower() if sentiment in ['Positive', 'Negative', 'Neutral'] else ''
-
-        # Truncate long email text for readability
-        if len(str(email_text)) > 500:
-            email_text = str(email_text)[:500] + "..."
-
-        # Highlight critical giving status
-        if giving_status in ['Paused giving', 'Removed bequest']:
-            giving_status = f'<span class="alert">{giving_status}</span>'
-
+    # Add alert box if there are giving concerns
+    if paused_giving > 0 or removed_bequest > 0:
         html += f"""
-            <tr class="{row_class}">
-                <td>{date_str}</td>
-                <td>{first_name} {last_name}<br><small>{email_addr}</small></td>
-                <td>{sentiment}</td>
-                <td>{giving_status}</td>
-                <td class="email-text">{email_text}</td>
-            </tr>
+        <div class="alert-box">
+            <strong>⚠️ Action Required:</strong> {paused_giving + removed_bequest} alumni have indicated changes to their giving status.
+            Please review the detailed report and follow up accordingly.
+        </div>
         """
 
+    # Add themes section
     html += f"""
-        </table>
+        <h2>🔍 Themes Observed</h2>
+        <div class="themes-list">
+    """
 
-        <div class="link">
-            <p><strong>📋 <a href="{email_config.SPREADSHEET_URL}">View Full Report in Google Sheets</a></strong></p>
+    # Add major themes
+    major_themes = themes.get('major_themes', [])
+    minor_themes = themes.get('minor_themes', [])
+
+    if major_themes:
+        if len(major_themes) == 1:
+            html += f"<p>Most correspondence focused on <strong>{major_themes[0][0]}</strong> ({major_themes[0][1]} emails).</p>"
+        else:
+            theme_list = ", ".join([f"<strong>{theme}</strong> ({count} emails)" for theme, count in major_themes[:-1]])
+            last_theme = f"<strong>{major_themes[-1][0]}</strong> ({major_themes[-1][1]} emails)"
+            html += f"<p>Most alumni discussed {theme_list}, and {last_theme}.</p>"
+
+    # Add minor themes if they exist
+    if minor_themes:
+        if len(minor_themes) == 1:
+            html += f"<p>Additionally, <strong>{minor_themes[0][0]}</strong> was mentioned ({minor_themes[0][1]} {'email' if minor_themes[0][1] == 1 else 'emails'}).</p>"
+        else:
+            minor_list = ", ".join([f"<strong>{theme}</strong> ({count})" for theme, count in minor_themes])
+            html += f"<p>Other topics mentioned include: {minor_list}.</p>"
+
+    html += """
+        </div>
+    """
+
+    # Add link to full report (no detailed email log)
+    html += f"""
+        <div class="link-box">
+            <p>📋 <a href="{email_config.SPREADSHEET_URL}">View Detailed Email Log in Google Sheets</a></p>
+            <p style="font-size: 14px; color: #666; margin-top: 10px;">Click above to see the complete list of emails with full details</p>
         </div>
 
-        <hr>
-        <p style="color: #7f8c8d; font-size: 12px;">
+        <div class="footer">
             This is an automated weekly summary from the Alumni Feedback System.<br>
             Generated on {datetime.now().strftime('%B %d, %Y at %I:%M %p')}
-        </p>
+        </div>
     </body>
     </html>
     """

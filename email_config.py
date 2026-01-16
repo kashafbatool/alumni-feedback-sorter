@@ -6,10 +6,10 @@ Update these values as needed.
 """
 
 # Recipient email address for weekly summaries
-RECIPIENT_EMAIL = "efratagetachew69@gmail.com"
+RECIPIENT_EMAIL = "kashaf742@gmail.com"
 
 # Google Sheets URL where alumni feedback data is stored
-SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1R6H2gC-lazqw0dvlBdAonqinnw7QlKLe_1uFfSqBL08/edit?gid=1043602809#gid=1043602809"
+SPREADSHEET_URL = "https://docs.google.com/spreadsheets/d/1GYc5XF3ScKZmqONY3eUmzrpYnQZuu6Z-qszOTnk2AVQ/edit?gid=0#gid=0"
 
 # Sender display name
 SENDER_NAME = "Alumni Feedback System"

@@ -132,54 +132,63 @@ def fetch_unread_emails(service, max_results=500):
 
         # Fetch full details for each message
         emails = []
+        skipped_count = 0
         for msg in messages:
-            message = service.users().messages().get(
-                userId='me',
-                id=msg['id'],
-                format='full'
-            ).execute()
-
-            # Extract headers
-            headers = message['payload']['headers']
-            subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), '')
-            from_addr = next((h['value'] for h in headers if h['name'].lower() == 'from'), '')
-            date_str = next((h['value'] for h in headers if h['name'].lower() == 'date'), '')
-
-            # Extract name and email
-            first_name, last_name, email_addr = extract_name_from_email(from_addr)
-
-            # Skip system emails (service accounts, no-reply, etc.)
-            if any(skip in email_addr.lower() for skip in ['gserviceaccount.com', 'noreply', 'no-reply', 'donotreply']):
-                continue
-
-            # Extract body
-            body = get_email_body(message['payload'])
-
-            # Skip emails with no meaningful content (too short or empty)
-            if not body or len(body.strip()) < 20:
-                continue
-
-            # Parse date (keep full datetime for sorting, then format)
             try:
-                # Parse the full date to get accurate timestamp
-                from email.utils import parsedate_to_datetime
-                date_obj = parsedate_to_datetime(date_str)
-                date_received = date_obj.strftime('%Y-%m-%d')
-                timestamp = date_obj.timestamp()
-            except:
-                date_received = datetime.today().strftime('%Y-%m-%d')
-                timestamp = datetime.today().timestamp()
+                message = service.users().messages().get(
+                    userId='me',
+                    id=msg['id'],
+                    format='full'
+                ).execute()
 
-            emails.append({
-                'id': msg['id'],
-                'First Name': first_name,
-                'Last Name': last_name,
-                'Email Address': email_addr,
-                'Subject': subject,
-                'Body': body,
-                'Date Received': date_received,
-                'timestamp': timestamp
-            })
+                # Extract headers
+                headers = message['payload']['headers']
+                subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), '')
+                from_addr = next((h['value'] for h in headers if h['name'].lower() == 'from'), '')
+                date_str = next((h['value'] for h in headers if h['name'].lower() == 'date'), '')
+
+                # Extract name and email
+                first_name, last_name, email_addr = extract_name_from_email(from_addr)
+
+                # Skip system emails (service accounts, no-reply, etc.)
+                if any(skip in email_addr.lower() for skip in ['gserviceaccount.com', 'noreply', 'no-reply', 'donotreply']):
+                    continue
+
+                # Extract body
+                body = get_email_body(message['payload'])
+
+                # Skip emails with no meaningful content (too short or empty)
+                if not body or len(body.strip()) < 20:
+                    continue
+
+                # Parse date (keep full datetime for sorting, then format)
+                try:
+                    # Parse the full date to get accurate timestamp
+                    from email.utils import parsedate_to_datetime
+                    date_obj = parsedate_to_datetime(date_str)
+                    date_received = date_obj.strftime('%Y-%m-%d')
+                    timestamp = date_obj.timestamp()
+                except:
+                    date_received = datetime.today().strftime('%Y-%m-%d')
+                    timestamp = datetime.today().timestamp()
+
+                emails.append({
+                    'id': msg['id'],
+                    'First Name': first_name,
+                    'Last Name': last_name,
+                    'Email Address': email_addr,
+                    'Subject': subject,
+                    'Body': body,
+                    'Date Received': date_received,
+                    'timestamp': timestamp
+                })
+            except Exception as e:
+                # Skip problematic messages (Gmail API errors, corrupted emails, etc.)
+                skipped_count += 1
+                continue
+
+        if skipped_count > 0:
+            print(f"   ⚠ Skipped {skipped_count} problematic emails")
 
         # Sort by timestamp (oldest first)
         emails.sort(key=lambda x: x.get('timestamp', 0))
@@ -366,8 +375,28 @@ def process_and_upload(spreadsheet_url):
     formatted_df.to_excel("Alumni_Feedback_Report_Gmail.xlsx", index=False)
     print(f"   ✓ Analysis complete")
 
+    # Detect President Raymond emails specifically
+    print(f"\n4. Detecting President Raymond emails...")
+
+    # Find emails mentioning President Raymond (various spellings including typos)
+    president_raymond_mask = formatted_df['Email Text/Synopsis of Conversation/Notes'].apply(
+        lambda body: pd.notna(body) and (
+            ('president' in str(body).lower() and 'raymond' in str(body).lower()) or
+            ('president' in str(body).lower() and 'ryamond' in str(body).lower()) or  # typo
+            ('raymond' in str(body).lower() and 'retiring' in str(body).lower()) or
+            ('president' in str(body).lower() and 'retiring' in str(body).lower() and 'transition' in str(body).lower())
+        )
+    )
+
+    president_raymond_count = president_raymond_mask.sum()
+
+    if president_raymond_count > 0:
+        print(f"   ✓ Found {president_raymond_count} emails about President Raymond")
+    else:
+        print(f"   • No President Raymond emails detected")
+
     # Group emails by month/year and upload to separate tabs
-    print(f"\n4. Uploading to Google Sheets...")
+    print(f"\n5. Uploading to Google Sheets...")
 
     # Convert Date Received to datetime and extract month/year
     formatted_df['Date Received'] = pd.to_datetime(formatted_df['Date Received'])
@@ -395,7 +424,7 @@ def process_and_upload(spreadsheet_url):
         print(f"   Uploading {len(group_df)} emails to '{month_year}' tab...")
 
         result = subprocess.run(
-            ['python3', 'sheets_uploader.py', spreadsheet_url, month_year],
+            ['python3', 'sheets_uploader.py', spreadsheet_url, temp_file, month_year],
             capture_output=True,
             text=True,
             env={**os.environ, 'GMAIL_UPLOAD': 'true', 'TEMP_FILE': temp_file}
@@ -408,16 +437,78 @@ def process_and_upload(spreadsheet_url):
                 print(f"      Error: {result.stderr}")
 
     if upload_success:
-        print("   ✓ All uploads successful!")
+        print("   ✓ Monthly tab uploaded successfully!")
 
+    # Upload President Raymond specific tab
+    if president_raymond_count > 0 and upload_success:
+        print(f"\n6. Creating 'President Raymond Resignation' tab...")
+
+        # Get President Raymond emails
+        raymond_emails = formatted_df[president_raymond_mask].copy()
+
+        # Convert Date Received back to date-only format
+        raymond_emails['Date Received'] = raymond_emails['Date Received'].dt.strftime('%Y-%m-%d')
+
+        # Remove helper column
+        raymond_emails = raymond_emails.drop('Month_Year', axis=1)
+
+        # Save to temporary Excel file
+        temp_file = "Alumni_Feedback_Report_President_Raymond.xlsx"
+        raymond_emails.to_excel(temp_file, index=False)
+
+        print(f"   Uploading {len(raymond_emails)} emails to 'President Raymond Resignation' tab...")
+
+        # Use direct gspread upload for reliability
+        try:
+            import gspread
+            from google.oauth2.service_account import Credentials
+
+            # Authenticate
+            CREDENTIALS_FILE = "credentials/service-account.json"
+            scopes = [
+                'https://www.googleapis.com/auth/spreadsheets',
+                'https://www.googleapis.com/auth/drive'
+            ]
+            creds = Credentials.from_service_account_file(CREDENTIALS_FILE, scopes=scopes)
+            client = gspread.authorize(creds)
+
+            # Open spreadsheet
+            sheet = client.open_by_url(spreadsheet_url)
+
+            # Get or create President Raymond tab
+            try:
+                pr_tab = sheet.worksheet('President Raymond Resignation')
+                pr_tab.clear()
+            except gspread.exceptions.WorksheetNotFound:
+                pr_tab = sheet.add_worksheet(title='President Raymond Resignation', rows=100, cols=14)
+
+            # Prepare data with headers
+            headers = raymond_emails.columns.tolist()
+            data_rows = raymond_emails.fillna('').values.tolist()
+            data_rows = [[str(cell) for cell in row] for row in data_rows]
+            all_data = [headers] + data_rows
+
+            # Upload
+            pr_tab.update(all_data, 'A1')
+            print("   ✓ President Raymond tab uploaded successfully!")
+
+        except Exception as e:
+            upload_success = False
+            print(f"   ✗ Upload failed for 'President Raymond Resignation': {e}")
+
+    if upload_success:
         print("\n" + "="*80)
         print("✓ SUCCESS! All emails processed and uploaded to Google Sheets")
         print("="*80)
         print(f"\nProcessed: {len(emails_to_process)} emails")
         print(f"Filtered: {len(filtered_out)} emails")
+        print(f"\nCreated tabs:")
+        print(f"  - jan 2026 ({len(emails_to_process)} emails)")
+        if president_raymond_count > 0:
+            print(f"  - President Raymond Resignation ({president_raymond_count} emails)")
         print(f"\nView sheet: {spreadsheet_url}")
     else:
-        print(f"   ✗ Upload failed: {result.stderr}")
+        print(f"   ✗ Upload failed")
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
